@@ -89,17 +89,9 @@ class Ui_LeaderboardPro(object):
         self.view_selector.setFont(QFont("Verdana", 12))  # Smaller font for view selector
         self.top_controls.addWidget(self.view_selector)
         self.chart_type_selector = QComboBox()
-        self.chart_type_selector.addItems(["Bar", "Horizontal Bar", "Line", "Scatter", "Pie", "Histogram", "Boxplot"])
+        self.chart_type_selector.addItems(["Bar", "Horizontal Bar", "Line", "Scatter"])
         self.chart_type_selector.setFont(QFont("Verdana", 12))
         self.top_controls.addWidget(self.chart_type_selector)
-        self.primary_label = QLabel("Primary Plot:")
-        self.top_controls.addWidget(self.primary_label)
-        self.primary_combo = QComboBox()
-        self.top_controls.addWidget(self.primary_combo)
-        self.secondary_label = QLabel("Secondary Plot:")
-        self.top_controls.addWidget(self.secondary_label)
-        self.secondary_combo = QComboBox()
-        self.top_controls.addWidget(self.secondary_combo)
         self.top_controls.addStretch()
         self.left_layout.addLayout(self.top_controls)
 

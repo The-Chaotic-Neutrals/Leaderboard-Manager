@@ -7,15 +7,15 @@ import file_io
 import re
 
 class TiersDialog(QDialog):
-    def __init__(self, parent, is_achievement=True, current_tiers=[]):
+    def __init__(self, parent, is_min_threshold=True, current_tiers=[]):
         super().__init__(parent)
-        self.is_achievement = is_achievement
-        self.setWindowTitle("Manage Achievement Tiers" if is_achievement else "Manage Penalty Tiers")
+        self.is_min_threshold = is_min_threshold
+        self.setWindowTitle("Manage Min Threshold Tiers" if is_min_threshold else "Manage Range Tiers")
         layout = QVBoxLayout()
         self.table = QTableWidget()
-        col_count = 3 if is_achievement else 4
+        col_count = 3 if is_min_threshold else 4
         self.table.setColumnCount(col_count)
-        headers = ["Min", "Label", "Color"] if is_achievement else ["Min", "Max", "Label", "Color"]
+        headers = ["Min", "Label", "Color"] if is_min_threshold else ["Min", "Max", "Label", "Color"]
         self.table.setHorizontalHeaderLabels(headers)
         layout.addWidget(self.table)
         buttons = QHBoxLayout()
@@ -40,7 +40,7 @@ class TiersDialog(QDialog):
         for r, tier in enumerate(tiers):
             min_item = QTableWidgetItem(str(tier[0]))
             self.table.setItem(r, 0, min_item)
-            if self.is_achievement:
+            if self.is_min_threshold:
                 label_item = QTableWidgetItem(tier[1])
                 self.table.setItem(r, 1, label_item)
                 color_item = QTableWidgetItem(tier[2])
@@ -61,7 +61,7 @@ class TiersDialog(QDialog):
         for r in range(self.table.rowCount()):
             try:
                 minv = float(self.table.item(r, 0).text())
-                if self.is_achievement:
+                if self.is_min_threshold:
                     label = self.table.item(r, 1).text()
                     color = self.table.item(r, 2).text()
                     tiers.append((minv, label, color))
@@ -73,7 +73,7 @@ class TiersDialog(QDialog):
                     tiers.append((minv, maxv, label, color))
             except:
                 pass
-        if self.is_achievement:
+        if self.is_min_threshold:
             tiers.sort(key=lambda x: x[0], reverse=True)
         else:
             tiers.sort(key=lambda x: x[0])
@@ -87,7 +87,7 @@ class TiersDialog(QDialog):
         if row == -1 and not add:
             return
         minv = 0.0 if row == -1 else float(self.table.item(row, 0).text())
-        if self.is_achievement:
+        if self.is_min_threshold:
             label = "" if row == -1 else self.table.item(row, 1).text()
             color_str = "#FFFFFF" if row == -1 else self.table.item(row, 2).text()
         else:
@@ -102,7 +102,7 @@ class TiersDialog(QDialog):
         min_input = QLineEdit(str(minv))
         elayout.addWidget(min_label)
         elayout.addWidget(min_input)
-        if not self.is_achievement:
+        if not self.is_min_threshold:
             max_label = QLabel("Max (inf for unbounded):")
             max_input = QLineEdit(max_str)
             elayout.addWidget(max_label)
@@ -129,14 +129,14 @@ class TiersDialog(QDialog):
             new_min = float(min_input.text())
             new_label = label_input.text()
             new_color = current_color.name()
-            if not self.is_achievement:
+            if not self.is_min_threshold:
                 new_max_str = max_input.text()
                 new_max = float('inf') if new_max_str.lower() == 'inf' else float(new_max_str)
             if add:
                 row = self.table.rowCount()
                 self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(str(new_min)))
-            if self.is_achievement:
+            if self.is_min_threshold:
                 self.table.setItem(row, 1, QTableWidgetItem(new_label))
                 color_item = QTableWidgetItem(new_color)
                 color_item.setBackground(current_color)
@@ -190,38 +190,39 @@ class ActionHandler:
             current_type = None
             current_tiers = []
             if col in self.main.data_model.column_tiers:
-                is_achievement, tiers = self.main.data_model.column_tiers[col]
-                current_type = "Achievement" if is_achievement else "Penalty"
+                is_min_threshold, tiers = self.main.data_model.column_tiers[col]
+                current_type = "Min Threshold" if is_min_threshold else "Range"
                 current_tiers = tiers
-            types = ["Achievement", "Penalty"]
+            types = ["Min Threshold", "Range"]
             type_index = types.index(current_type) if current_type else 0
             tier_type, ok2 = QInputDialog.getItem(self.main, "Tier Type", "Select tier type:", types, type_index, False)
             if ok2:
-                is_achievement = (tier_type == "Achievement")
+                is_min_threshold = (tier_type == "Min Threshold")
                 if current_type and tier_type != current_type:
                     reply = QMessageBox.question(self.main, "Change Type", "Changing type will clear existing tiers. Proceed?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
                     if reply != QMessageBox.Yes:
                         return
                     current_tiers = []
                 if not current_tiers:
-                    if is_achievement:
+                    if is_min_threshold:
                         current_tiers = [
-                            (85.0, "Amethyst", "#2b0438"),
-                            (80.0, "Gold", "#322d05"),
-                            (70.0, "Silver", "#161616"),
-                            (60.0, "Bronze", "#221406")
+                            (90, "Amethyst (≥90)", "#9966FF80"),
+                            (75, "Gold (≥75)", "#FFD70080"),
+                            (50, "Silver (≥50)", "#C0C0C080"),
+                            (25, "Bronze (≥25)", "#CD7F3280"),
+                            (0, "White (≥0)", "#FFFFFF80")
                         ]
                     else:
                         current_tiers = [
-                            (0, 0, "Amethyst (None)", "#2b0438"),
-                            (1, 10, "Green (1-10)", "#008000"),
-                            (11, 20, "Orange (11-20)", "#FFA500"),
-                            (21, float('inf'), "Red (21+)", "#FF0000")
+                            (0, 10, "Green (0-10)", "#00800080"),
+                            (11, 20, "Yellow (11-20)", "ffff00"),
+                            (21, 30, "Orange (21-30)", "#ff5500"),
+                            (31, float('inf'), "Red (31+)", "#FF0000")
                         ]
-                dlg = TiersDialog(self.main, is_achievement=is_achievement, current_tiers=current_tiers)
+                dlg = TiersDialog(self.main, is_min_threshold=is_min_threshold, current_tiers=current_tiers)
                 if dlg.exec_():
                     tiers = dlg.get_tiers()
-                    self.main.data_model.set_column_tiers(col, is_achievement, tiers)
+                    self.main.data_model.set_column_tiers(col, is_min_threshold, tiers)
                     self.main.data_model.save_to_history()
                     self.main.update_legends()
                     self.main.refresh_table()
@@ -420,7 +421,7 @@ class ActionHandler:
         if path:
             if path.endswith('.xlsx'):
                 file_io.save_multi(self.main.data_models, path)
-                QMessageBox.information(self.main, "Export Successful", f"All pages saved to {path}")
+                QMessageBox.information(self, "Export Successful", f"All pages saved to {path}")
             else:
                 file_io.export_df(self.main.data_model.df, path)
                 QMessageBox.information(self.main, "Export Successful", f"Current page saved to {path}")

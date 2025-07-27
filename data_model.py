@@ -18,19 +18,18 @@ class DataModel:
         self.column_formulas = {}
         self.column_formula_refs = {}
         self.column_tiers = {}
-        self.plot_primary = None
-        self.plot_secondary = None
+        self.plot_columns = []
         self.all_data_models = None  # Will be set by main
         self.set_column_types()
         self.save_to_history()
 
     def save_to_history(self):
-        self.df_history.append((copy.deepcopy(self.df), copy.deepcopy(self.column_types), copy.deepcopy(self.column_formulas), copy.deepcopy(self.column_formula_refs), copy.deepcopy(self.column_tiers), self.plot_primary, self.plot_secondary))
+        self.df_history.append((copy.deepcopy(self.df), copy.deepcopy(self.column_types), copy.deepcopy(self.column_formulas), copy.deepcopy(self.column_formula_refs), copy.deepcopy(self.column_tiers), copy.deepcopy(self.plot_columns)))
 
     def undo(self):
         if len(self.df_history) > 1:
             self.df_history.pop()
-            self.df, self.column_types, self.column_formulas, self.column_formula_refs, self.column_tiers, self.plot_primary, self.plot_secondary = copy.deepcopy(self.df_history[-1])
+            self.df, self.column_types, self.column_formulas, self.column_formula_refs, self.column_tiers, self.plot_columns = copy.deepcopy(self.df_history[-1])
             return True
         return False
 
@@ -113,8 +112,8 @@ class DataModel:
                 indeg[v] -= 1
                 if indeg[v] == 0:
                     q.append(v)
-        if len(order) != len(indeg):
-            print("Cycle detected in dependency graph. Skipping cycle nodes.")
+        if len(order) != len(computed):
+            print("Cycle detected in formula dependencies")
         return order
 
     def recompute_all_computed(self):
@@ -185,10 +184,8 @@ class DataModel:
             self.column_formula_refs[new_name] = self.column_formula_refs.pop(old_name)
         if old_name in self.column_tiers:
             self.column_tiers[new_name] = self.column_tiers.pop(old_name)
-        if self.plot_primary == old_name:
-            self.plot_primary = new_name
-        if self.plot_secondary == old_name:
-            self.plot_secondary = new_name
+        if old_name in self.plot_columns:
+            self.plot_columns = [new_name if c == old_name else c for c in self.plot_columns]
         self.save_to_history()
 
     def change_column_type(self, col, new_typ):
@@ -240,29 +237,27 @@ class DataModel:
                     graph[full_target].add(ref_full)
         return graph
 
-    def find_cycle(self):
+    def has_cycle(self):
         graph = self.build_dep_graph()
         visited = {}
-        path = []
+        path = {}
         def dfs(node):
+            if node in path:
+                return True
             if node in visited:
-                return None
+                return False
             visited[node] = True
-            path.append(node)
+            path[node] = True
             for neigh in graph.get(node, []):
-                if neigh in path:
-                    idx = path.index(neigh)
-                    return path[idx:] + [neigh]
-                cycle = dfs(neigh)
-                if cycle:
-                    return cycle
-            path.pop()
-            return None
+                if dfs(neigh):
+                    return True
+            del path[node]
+            return False
         for node in graph:
-            cycle = dfs(node)
-            if cycle:
-                return cycle
-        return None
+            if node not in visited:
+                if dfs(node):
+                    return True
+        return False
 
     def set_column_formula(self, col, formula):
         if col not in self.df.columns:
@@ -291,15 +286,14 @@ class DataModel:
         old_refs = self.column_formula_refs.get(col)
         self.column_formulas[col] = formula
         self.column_formula_refs[col] = refs
-        cycle = self.find_cycle()
-        if cycle is not None:
+        if self.has_cycle():
             if old_formula is not None:
                 self.column_formulas[col] = old_formula
                 self.column_formula_refs[col] = old_refs
             else:
                 del self.column_formulas[col]
                 del self.column_formula_refs[col]
-            raise ValueError(f"Formula creates a dependency cycle: {' -> '.join(cycle)}")
+            raise ValueError("Formula creates a dependency cycle.")
         self.recompute_all_computed()
         self.save_to_history()
 
@@ -343,27 +337,24 @@ class DataModel:
         self.df.drop(columns=[col], inplace=True)
         if col in self.column_types:
             del self.column_types[col]
-        if self.plot_primary == col:
-            self.plot_primary = None
-        if self.plot_secondary == col:
-            self.plot_secondary = None
+        self.plot_columns = [c for c in self.plot_columns if c != col]
         self.save_to_history()
 
-    def set_column_tiers(self, col, is_achievement, tiers):
+    def set_column_tiers(self, col, is_min_threshold, tiers):
         if col not in self.df.columns:
             raise ValueError("Column does not exist.")
         if self.column_types.get(col) not in ["integer", "float", "boolean"]:
             raise ValueError("Column must be numeric.")
-        self.column_tiers[col] = (is_achievement, tiers)
+        self.column_tiers[col] = (is_min_threshold, tiers)
         self.save_to_history()
 
     def get_column_color(self, col, value):
         if col not in self.column_tiers:
             return QColor("transparent")
-        is_achievement, tiers = self.column_tiers[col]
+        is_min_threshold, tiers = self.column_tiers[col]
         try:
             value = float(value)
-            if is_achievement:
+            if is_min_threshold:
                 for min_val, _, color in tiers:
                     if value >= min_val:
                         return QColor(color)
@@ -374,13 +365,3 @@ class DataModel:
             return QColor("transparent")
         except ValueError:
             return QColor("transparent")
-
-    def set_plot_primary(self, col):
-        if col and col not in self.df.columns:
-            return
-        self.plot_primary = col
-
-    def set_plot_secondary(self, col):
-        if col and col not in self.df.columns:
-            return
-        self.plot_secondary = col

@@ -3,7 +3,7 @@ import sys
 import os
 import pandas as pd
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QLabel, QMenu, QAction, QWidget, QVBoxLayout
+    QApplication, QMainWindow, QMessageBox, QLabel, QMenu, QAction, QDialog, QVBoxLayout, QCheckBox, QPushButton, QListWidget, QListWidgetItem, QWidget, QHBoxLayout
 )
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt
@@ -57,11 +57,8 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
 
         self.page_selector.currentIndexChanged.connect(self.change_page)
         self.chart_type_selector.currentTextChanged.connect(self.update_chart)
-        self.primary_combo.currentTextChanged.connect(self.on_primary_changed)
-        self.secondary_combo.currentTextChanged.connect(self.on_secondary_changed)
         self.chart_type_selector.hide()  # Hide initially
         self.apply_styles()
-        self.update_plot_combos()
         self.refresh_table()
         self.change_view(self.current_view)
         self.update_legends()
@@ -146,18 +143,44 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.delete_column_action.triggered.connect(self.action_handler.delete_column)
         self.column_menu.addAction(self.delete_column_action)
 
+        # Add Plot menu
+        self.plot_menu = QMenu("Plot", self)
+        self.menuBar().addMenu(self.plot_menu)
+        self.select_plot_columns_action = QAction("Select Columns to Plot", self)
+        self.select_plot_columns_action.triggered.connect(self.select_plot_columns)
+        self.plot_menu.addAction(self.select_plot_columns_action)
+
         # Shortcuts
         shortcuts.setup_shortcuts(self)
 
-    def on_primary_changed(self, text):
-        col = None if text == "None" else text
-        self.data_model.plot_primary = col
-        self.update_chart()
-
-    def on_secondary_changed(self, text):
-        col = None if text == "None" else text
-        self.data_model.plot_secondary = col
-        self.update_chart()
+    def select_plot_columns(self):
+        numeric_cols = [col for col, typ in self.data_model.column_types.items() if typ in ["integer", "float", "boolean"]]
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Select Columns to Plot")
+        layout = QVBoxLayout()
+        list_widget = QListWidget()
+        list_widget.setSelectionMode(QListWidget.MultiSelection)
+        for col in numeric_cols:
+            item = QListWidgetItem(col)
+            list_widget.addItem(item)
+        if self.data_model.plot_columns:
+            for i in range(list_widget.count()):
+                if list_widget.item(i).text() in self.data_model.plot_columns:
+                    list_widget.item(i).setSelected(True)
+        layout.addWidget(list_widget)
+        buttons = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.clicked.connect(dlg.accept)
+        buttons.addWidget(ok_btn)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dlg.reject)
+        buttons.addWidget(cancel_btn)
+        layout.addLayout(buttons)
+        dlg.setLayout(layout)
+        if dlg.exec_() == QDialog.Accepted:
+            selected = [item.text() for item in list_widget.selectedItems()]
+            self.data_model.plot_columns = selected
+            self.update_chart()
 
     def toggle_legends(self, checked):
         self.show_legends = checked
@@ -167,7 +190,6 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.current_page = index
         self.data_model = self.data_models[index]
         self.refresh_table()
-        self.update_plot_combos()
         self.update_chart()
         self.update_legends()
         self.change_view(self.current_view)
@@ -268,8 +290,8 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
             title = QLabel(f"{col} Color Legend")
             title.setStyleSheet("color: #3498db; font-weight: bold;")
             wlayout.addWidget(title)
-            is_achievement, tiers = self.data_model.column_tiers[col]
-            if is_achievement:
+            is_min_threshold, tiers = self.data_model.column_tiers[col]
+            if is_min_threshold:
                 for _, text, color in tiers:
                     label = QLabel(text)
                     label.setStyleSheet(f"color: {color};")
@@ -283,26 +305,6 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
             layout.addWidget(widget)
         layout.addStretch()
 
-    def update_plot_combos(self):
-        numeric_cols = ["None"] + [col for col, typ in self.data_model.column_types.items() if typ in ["integer", "float", "boolean"]]
-        self.primary_combo.blockSignals(True)
-        self.primary_combo.clear()
-        self.primary_combo.addItems(numeric_cols)
-        if self.data_model.plot_primary:
-            self.primary_combo.setCurrentText(self.data_model.plot_primary)
-        else:
-            self.primary_combo.setCurrentIndex(0)
-        self.primary_combo.blockSignals(False)
-
-        self.secondary_combo.blockSignals(True)
-        self.secondary_combo.clear()
-        self.secondary_combo.addItems(numeric_cols)
-        if self.data_model.plot_secondary:
-            self.secondary_combo.setCurrentText(self.data_model.plot_secondary)
-        else:
-            self.secondary_combo.setCurrentIndex(0)
-        self.secondary_combo.blockSignals(False)
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     palette = QPalette()
@@ -313,3 +315,138 @@ if __name__ == "__main__":
     window = LeaderboardPro()
     window.show()
     sys.exit(app.exec_())
+python
+
+Collapse
+
+Wrap
+
+Run
+
+Copy
+# chart_handler.py
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+import pandas as pd
+import matplotlib.colors as mcolors
+
+class ChartHandler:
+    def __init__(self, main):
+        self.main = main
+        self.main.view_selector.currentTextChanged.connect(self.change_view)
+
+    def change_view(self, view):
+        self.main.change_view(view)
+
+    def update_chart(self):
+        type = self.main.chart_type_selector.currentText()
+        title_fontsize = self.main.chart_base_font_size + 2
+        tick_fontsize = self.main.chart_base_font_size - 1
+        legend_fontsize = self.main.chart_base_font_size - 2
+
+        # Clear previous plot
+        for ax in self.main.figure.get_axes():
+            ax.clear()
+        self.main.figure.clear()
+        self.main.figure.patch.set_facecolor("#000")
+
+        plot_cols = self.main.data_model.plot_columns
+        if plot_cols:
+            # Sort df by first plot col if present
+            sort_col = plot_cols[0] if plot_cols else self.main.data_model.model_col_name
+            sorted_df = self.main.data_model.df.sort_values(by=sort_col, ascending=False)
+
+            labels = sorted_df["Model"]
+            x = range(len(sorted_df))
+            y = list(range(len(sorted_df)))[::-1]  # for horizontal
+
+            values_dict = {col: sorted_df[col] for col in plot_cols}
+            colors_dict = {col: [self.main.data_model.get_column_color(col, v).name() for v in values_dict[col]] for col in plot_cols}
+            has_colors_dict = {col: col in self.main.data_model.column_tiers for col in plot_cols}
+
+            num_series = len(plot_cols)
+
+            if num_series == 0:
+                return
+
+            default_colors = list(mcolors.TABLEAU_COLORS.values())
+
+            subplots_types = ["Pie", "Histogram", "Boxplot"]
+            if type in subplots_types and num_series > 1:
+                self.main.ax = self.main.figure.subplots(1, num_series)
+                axes = self.main.ax
+            else:
+                self.main.ax = self.main.figure.subplots()
+                axes = [self.main.ax] * num_series
+
+            for i, col in enumerate(plot_cols):
+                ax = axes[i] if type in subplots_types and num_series > 1 else axes[0]
+                values = values_dict[col]
+                series_color = default_colors[i % len(default_colors)]
+                colors = colors_dict[col] if has_colors_dict[col] else series_color
+
+                if type == "Bar":
+                    bar_width = 0.8 / num_series if num_series > 1 else 0.4
+                    offset = (i - (num_series - 1) / 2) * bar_width
+                    ax.bar([j + offset for j in x], values, width=bar_width, color=colors, label=col)
+
+                elif type == "Horizontal Bar":
+                    bar_height = 0.8 / num_series if num_series > 1 else 0.4
+                    offset = (i - (num_series - 1) / 2) * bar_height
+                    ax.barh([j + offset for j in y], values, height=bar_height, color=colors, label=col)
+
+                elif type == "Line":
+                    ax.plot(x, values, marker='o', label=col, color=series_color)
+
+                elif type == "Scatter":
+                    ax.scatter(x, values, label=col, color=series_color)
+
+                elif type == "Pie":
+                    ax.pie(values, labels=labels, autopct='%1.1f%%', colors=colors if isinstance(colors, list) else None)
+                    ax.set_title(col)
+
+                elif type == "Histogram":
+                    ax.hist(values, bins=10, color=series_color, alpha=0.7)
+                    ax.set_title(col)
+
+                elif type == "Boxplot":
+                    ax.boxplot(values)
+                    ax.set_title(col)
+
+            if type not in subplots_types or num_series == 1:
+                ax = axes[0]
+                if type in ["Bar", "Line", "Scatter"]:
+                    ax.set_xticks(x)
+                    ax.set_xticklabels(labels, rotation=35, ha="right")
+                if type == "Horizontal Bar":
+                    ax.set_yticks(y)
+                    ax.set_yticklabels(labels)
+                if type in ["Bar", "Horizontal Bar", "Line", "Scatter"]:
+                    ax.legend()
+
+            # Add grid and customize spines
+            for a in self.main.figure.get_axes():
+                a.set_facecolor("#000")
+                a.spines['right'].set_visible(False)
+                a.spines['top'].set_visible(False)
+                a.spines['left'].set_color('white')
+                a.spines['bottom'].set_color('white')
+                a.tick_params(axis='both', colors='white', labelsize=tick_fontsize)
+                a.grid(True, linestyle='--', alpha=0.3, color='gray')
+
+            if self.main.show_legends:
+                handles = []
+                for col in plot_cols:
+                    if col in self.main.data_model.column_tiers:
+                        is_min_threshold, tiers = self.main.data_model.column_tiers[col]
+                        if is_min_threshold:
+                            handles += [Patch(color=color, label=label) for minv, label, color in tiers]
+                        else:
+                            handles += [Patch(color=color, label=label) for minv, maxv, label, color in tiers]
+                if handles:
+                    legend_ax = self.main.figure.add_axes([0.9, 0.1, 0.1, 0.8])
+                    legend_ax.axis('off')
+                    legend_ax.legend(handles=handles, loc='center left', facecolor="#000", edgecolor="#FFFFFF", labelcolor="#FFFFFF", fontsize=legend_fontsize, ncol=1)
+
+        self.main.figure.tight_layout(rect=[0, 0, 0.9, 1])
+        self.main.canvas.draw()

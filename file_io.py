@@ -30,6 +30,8 @@ def load_multi(session_file):
         if 'formulas_str' in row and pd.notna(row['formulas_str']):
             strs = row['formulas_str'].split('|')
             for s in strs:
+                if not s.strip():
+                    continue
                 if ':' in s:
                     c, f = s.split(':', 1)
                     dm.column_formulas[c] = f.replace('||', '|')
@@ -38,29 +40,32 @@ def load_multi(session_file):
         if 'tiers_str' in row and pd.notna(row['tiers_str']):
             strs = row['tiers_str'].split('|')
             for s in strs:
-                if ':' in s:
-                    parts = s.split(':')
-                    c = parts[0]
-                    typ_tiers = parts[1]
-                    typ, tiers_str = typ_tiers.split(';', 1)
-                    is_ach = typ == 'a'
-                    tier_list = []
-                    tier_strs = tiers_str.split(';')
-                    for ts in tier_strs:
-                        tp = ts.split(',')
-                        if is_ach:
-                            minv = float(tp[0])
-                            label = tp[1]
-                            color = tp[2]
-                            tier_list.append((minv, label, color))
-                        else:
-                            minv = float(tp[0])
-                            max_str = tp[1]
-                            maxv = float('inf') if max_str == 'inf' else float(max_str)
-                            label = tp[2]
-                            color = tp[3]
-                            tier_list.append((minv, maxv, label, color))
-                    dm.column_tiers[c] = (is_ach, tier_list)
+                if not s.strip():
+                    continue
+                parts = s.split(':')
+                c = parts[0]
+                typ_tiers = parts[1]
+                typ, tiers_str = typ_tiers.split(';', 1)
+                is_min_threshold = typ == 'a'
+                tier_list = []
+                tier_strs = tiers_str.split(';')
+                for ts in tier_strs:
+                    if not ts.strip():
+                        continue
+                    tp = ts.split(',')
+                    if is_min_threshold:
+                        minv = float(tp[0])
+                        label = tp[1]
+                        color = tp[2]
+                        tier_list.append((minv, label, color))
+                    else:
+                        minv = float(tp[0])
+                        max_str = tp[1]
+                        maxv = float('inf') if max_str == 'inf' else float(max_str)
+                        label = tp[2]
+                        color = tp[3]
+                        tier_list.append((minv, maxv, label, color))
+                dm.column_tiers[c] = (is_min_threshold, tier_list)
         # Backwards compat
         if 'score_col' in row and pd.notna(row['score_col']):
             score_col = row['score_col']
@@ -91,10 +96,7 @@ def load_multi(session_file):
                     color = parts[3]
                     tiers.append((minv, maxv, label, color))
                 dm.column_tiers[penalty_col] = (False, sorted(tiers, key=lambda x: x[0]))
-        if 'plot_primary' in row and pd.notna(row['plot_primary']):
-            dm.plot_primary = row['plot_primary']
-        if 'plot_secondary' in row and pd.notna(row['plot_secondary']):
-            dm.plot_secondary = row['plot_secondary']
+        dm.plot_columns = row['plot_columns'].split(',') if 'plot_columns' in row and pd.notna(row['plot_columns']) else []
         dms.append(dm)
     return dms
 
@@ -106,22 +108,21 @@ def save_multi(dms, session_file):
             formulas_str = '|'.join([f"{c}:{f.replace('|', '||')}" for c, f in dm.column_formulas.items()])
             meta['formulas_str'] = formulas_str if formulas_str else None
             tiers_str_list = []
-            for c, (is_ach, tiers) in dm.column_tiers.items():
+            for c, (is_min_threshold, tiers) in dm.column_tiers.items():
                 inner = []
                 for tier in tiers:
-                    if is_ach:
+                    if is_min_threshold:
                         ts = ','.join([str(tier[0]), tier[1], tier[2]])
                     else:
                         max_str = 'inf' if tier[1] == float('inf') else str(tier[1])
                         ts = ','.join([str(tier[0]), max_str, tier[2], tier[3]])
                     inner.append(ts)
                 tiers_inner = ';'.join(inner)
-                typ = 'a' if is_ach else 'p'
+                typ = 'a' if is_min_threshold else 'p'
                 tiers_str_list.append(f"{c}:{typ};{tiers_inner}")
             tiers_str = '|'.join(tiers_str_list)
             meta['tiers_str'] = tiers_str if tiers_str else None
-            meta['plot_primary'] = dm.plot_primary
-            meta['plot_secondary'] = dm.plot_secondary
+            meta['plot_columns'] = ','.join(dm.plot_columns) if dm.plot_columns else None
             metadata.append(meta)
         pd.DataFrame(metadata).to_excel(writer, sheet_name='Metadata', index=False)
         for dm in dms:
