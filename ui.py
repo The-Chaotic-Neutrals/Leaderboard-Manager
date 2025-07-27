@@ -77,7 +77,23 @@ class Ui_LeaderboardPro(object):
         self.bg.show()
 
         self.left_layout = QVBoxLayout()
-        self.main_layout.addLayout(self.left_layout, 3)
+
+        # Top controls for page and view selectors
+        self.top_controls = QHBoxLayout()
+        self.top_controls.addStretch()
+        self.page_selector = QComboBox()
+        self.page_selector.setFont(QFont("Verdana", 18))  # Larger font for page selector
+        self.top_controls.addWidget(self.page_selector)
+        self.view_selector = QComboBox()
+        self.view_selector.addItems(["Table", "Chart"])
+        self.view_selector.setFont(QFont("Verdana", 12))  # Smaller font for view selector
+        self.top_controls.addWidget(self.view_selector)
+        self.chart_type_selector = QComboBox()
+        self.chart_type_selector.addItems(["Bar", "Horizontal Bar", "Line", "Scatter", "Pie", "Histogram", "Boxplot"])
+        self.chart_type_selector.setFont(QFont("Verdana", 12))
+        self.top_controls.addWidget(self.chart_type_selector)
+        self.top_controls.addStretch()
+        self.left_layout.addLayout(self.top_controls)
 
         self.table = QTableWidget()
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
@@ -91,13 +107,30 @@ class Ui_LeaderboardPro(object):
         self.canvas = FigureCanvas(self.figure)
         self.left_layout.addWidget(self.canvas)
 
+        # Bottom controls for add/remove model
+        self.bottom_controls = QHBoxLayout()
+        self.model_input = QLineEdit()
+        self.model_input.setPlaceholderText("New Model Name")
+        self.bottom_controls.addWidget(self.model_input)
+        self.add_btn = QPushButton("Add Model")
+        self.bottom_controls.addWidget(self.add_btn)
+        self.remove_btn = QPushButton("Remove Selected Model")
+        self.bottom_controls.addWidget(self.remove_btn)
+        self.left_layout.addLayout(self.bottom_controls)
+
+        self.left_widget = QWidget(LeaderboardPro)
+        self.left_widget.setLayout(self.left_layout)
+        self.main_layout.addWidget(self.left_widget, 3)
+
+        self.control_layout = QVBoxLayout()
+
         self.legend_widget = QWidget()
         legend_layout = QVBoxLayout(self.legend_widget)
         legend_layout.setContentsMargins(5, 5, 5, 5)
         legend_layout.setSpacing(2)
         legend_title = QLabel("Score Color Legend")
         legend_layout.addWidget(legend_title)
-        self.left_layout.addWidget(self.legend_widget)
+        self.control_layout.addWidget(self.legend_widget)
 
         self.abnormal_legend_widget = QWidget()
         abnormal_legend_layout = QVBoxLayout(self.abnormal_legend_widget)
@@ -105,35 +138,13 @@ class Ui_LeaderboardPro(object):
         abnormal_legend_layout.setSpacing(2)
         abnormal_legend_title = QLabel("Penalty Color Legend")
         abnormal_legend_layout.addWidget(abnormal_legend_title)
-        self.left_layout.addWidget(self.abnormal_legend_widget)
-
-        self.control_layout = QVBoxLayout()
-        self.main_layout.addLayout(self.control_layout, 1)
-
-        self.page_label = QLabel("Page:")
-        self.control_layout.addWidget(self.page_label)
-
-        self.page_selector = QComboBox()
-        self.control_layout.addWidget(self.page_selector)
-
-        self.model_input = QLineEdit()
-        self.model_input.setPlaceholderText("New Model Name")
-        self.control_layout.addWidget(self.model_input)
-
-        self.add_btn = QPushButton("Add Model")
-        self.control_layout.addWidget(self.add_btn)
-
-        self.remove_btn = QPushButton("Remove Selected Model")
-        self.control_layout.addWidget(self.remove_btn)
-
-        self.view_label = QLabel("View Mode:")
-        self.control_layout.addWidget(self.view_label)
-
-        self.view_selector = QComboBox()
-        self.view_selector.addItems(["Table", "Bar Chart"])
-        self.control_layout.addWidget(self.view_selector)
+        self.control_layout.addWidget(self.abnormal_legend_widget)
 
         self.control_layout.addStretch()
+
+        self.right_widget = QWidget(LeaderboardPro)
+        self.right_widget.setLayout(self.control_layout)
+        self.main_layout.addWidget(self.right_widget, 1)
 
         self.menubar = LeaderboardPro.menuBar()
         self.customize_menu = self.menubar.addMenu("Customize")

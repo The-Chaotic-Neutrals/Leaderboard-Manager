@@ -34,6 +34,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.has_been_sorted = False
         self.current_sort_col = 0
         self.current_sort_order = Qt.AscendingOrder
+        self.show_legends = True
 
         self.data_models = load_multi(data_model.DataModel.SESSION_FILE) if os.path.exists(data_model.DataModel.SESSION_FILE) else [data_model.DataModel()]
 
@@ -51,6 +52,8 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.action_handler = ActionHandler(self)
 
         self.page_selector.currentIndexChanged.connect(self.change_page)
+        self.chart_type_selector.currentTextChanged.connect(self.update_chart)
+        self.chart_type_selector.hide()  # Hide initially
         self.apply_styles()
         self.refresh_table()
         self.change_view(self.current_view)
@@ -60,11 +63,13 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.open_action = QAction("Open", self)
         self.save_action = QAction("Save", self)
         self.reload_action = QAction("Reload", self)
+        self.new_session_action = QAction("New Session", self)
 
         # Set action texts
         self.open_action.setText("Import Data (CSV/Excel)")
         self.save_action.setText("Save Session")
         self.reload_action.setText("Reload Session")
+        self.new_session_action.setText("New Session")
 
         # Create export action
         self.export_action = QAction("Export Current Session", self)
@@ -78,6 +83,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.file_menu.addAction(self.save_action)
         self.file_menu.addAction(self.undo_action)
         self.file_menu.addAction(self.reload_action)
+        self.file_menu.addAction(self.new_session_action)
 
         # Add Model menu
         self.model_menu = QMenu("Model", self)
@@ -95,9 +101,14 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.table_view_action = QAction("Table", self)
         self.table_view_action.triggered.connect(lambda: self.view_selector.setCurrentText("Table"))
         self.view_menu.addAction(self.table_view_action)
-        self.bar_view_action = QAction("Bar Chart", self)
-        self.bar_view_action.triggered.connect(lambda: self.view_selector.setCurrentText("Bar Chart"))
-        self.view_menu.addAction(self.bar_view_action)
+        self.chart_view_action = QAction("Chart", self)
+        self.chart_view_action.triggered.connect(lambda: self.view_selector.setCurrentText("Chart"))
+        self.view_menu.addAction(self.chart_view_action)
+        self.toggle_legends_action = QAction("Show Legends", self)
+        self.toggle_legends_action.setCheckable(True)
+        self.toggle_legends_action.setChecked(True)
+        self.toggle_legends_action.triggered.connect(self.toggle_legends)
+        self.view_menu.addAction(self.toggle_legends_action)
 
         # Add Page menu
         self.page_menu = QMenu("Page", self)
@@ -131,12 +142,17 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         # Shortcuts
         shortcuts.setup_shortcuts(self)
 
+    def toggle_legends(self, checked):
+        self.show_legends = checked
+        self.change_view(self.current_view)
+
     def change_page(self, index):
         self.current_page = index
         self.data_model = self.data_models[index]
         self.refresh_table()
         self.update_chart()
         self.update_legends()
+        self.change_view(self.current_view)
 
     def apply_styles(self):
         self.style_handler.apply_styles()
@@ -155,19 +171,17 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         if view == "Table":
             self.table.show()
             self.canvas.hide()
-            if self.data_model.score_col:
-                self.legend_widget.show()
+            self.chart_type_selector.hide()
+            self.update_legends()
+            if self.show_legends:
+                self.right_widget.show()
             else:
-                self.legend_widget.hide()
-            if self.data_model.penalty_col:
-                self.abnormal_legend_widget.show()
-            else:
-                self.abnormal_legend_widget.hide()
+                self.right_widget.hide()
         else:
             self.table.hide()
             self.canvas.show()
-            self.legend_widget.hide()
-            self.abnormal_legend_widget.hide()
+            self.chart_type_selector.show()
+            self.right_widget.hide()
             self.update_chart()
 
     def reload_session(self):
@@ -182,6 +196,20 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.change_page(0)
         self.update_legends()
         QMessageBox.information(self, "Reload Successful", "Session reloaded from file.")
+
+    def new_session(self):
+        reply = QMessageBox.question(self, "New Session", "Are you sure you want to start a new session? Unsaved changes will be lost.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.data_models = [data_model.DataModel()]
+            for dm in self.data_models:
+                dm.all_data_models = self.data_models
+            self.page_selector.clear()
+            self.page_selector.addItem("Default")
+            self.current_page = 0
+            self.page_selector.setCurrentIndex(0)
+            self.change_page(0)
+            self.update_legends()
+            QMessageBox.information(self, "New Session", "New session started.")
 
     def save_session_manually(self):
         self.action_handler.save_session_manually()
@@ -226,6 +254,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
                 label = QLabel(text)
                 label.setStyleSheet(f"color: {color};")
                 layout.addWidget(label)
+            self.legend_widget.show()
         else:
             self.legend_widget.hide()
 
@@ -245,6 +274,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
                 label = QLabel(text)
                 label.setStyleSheet(f"color: {color};")
                 layout.addWidget(label)
+            self.abnormal_legend_widget.show()
         else:
             self.abnormal_legend_widget.hide()
 

@@ -20,6 +20,10 @@ def setup_shortcuts(window):
     window.reload_action.triggered.connect(window.reload_session)
     window.addAction(window.reload_action)
 
+    window.new_session_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_R))
+    window.new_session_action.triggered.connect(window.new_session)
+    window.addAction(window.new_session_action)
+
     window.export_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_E))
 
     window.add_model_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_M))
@@ -28,7 +32,7 @@ def setup_shortcuts(window):
 
     window.table_view_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_T))
 
-    window.bar_view_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_B))
+    window.chart_view_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_B))
 
     window.add_page_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_N))
 
@@ -51,3 +55,6 @@ def setup_shortcuts(window):
     window.penalty_tiers_action.setShortcut(QKeySequence(Qt.CTRL + Qt.ALT + Qt.Key_Y))
     window.font_size_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_S))
     window.font_family_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_F))
+
+    window.toggle_legends_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_L))
+    window.addAction(window.toggle_legends_action)

@@ -4,6 +4,7 @@ from PyQt5.QtGui import QColor
 import pandas as pd
 import data_model
 import file_io
+import re
 
 class TiersDialog(QDialog):
     def __init__(self, parent, is_score=True, current_tiers=[]):
@@ -173,6 +174,7 @@ class ActionHandler:
             self.main.update_legends()
             self.main.refresh_table()
             self.main.update_chart()
+            self.main.change_view(self.main.current_view)
 
     def set_penalty_tiers(self):
         dlg = TiersDialog(self.main, is_score=False, current_tiers=self.main.data_model.penalty_tiers)
@@ -183,6 +185,7 @@ class ActionHandler:
             self.main.update_legends()
             self.main.refresh_table()
             self.main.update_chart()
+            self.main.change_view(self.main.current_view)
 
     def set_score_column(self):
         numeric_cols = [col for col, typ in self.main.data_model.column_types.items() if typ in ["integer", "float", "boolean"] and col != self.main.data_model.penalty_col]
@@ -196,6 +199,7 @@ class ActionHandler:
                 self.main.refresh_table()
                 self.main.update_chart()
                 self.main.update_legends()
+                self.main.change_view(self.main.current_view)
             except ValueError as e:
                 QMessageBox.warning(self.main, "Error", str(e))
 
@@ -211,6 +215,7 @@ class ActionHandler:
                 self.main.refresh_table()
                 self.main.update_chart()
                 self.main.update_legends()
+                self.main.change_view(self.main.current_view)
             except ValueError as e:
                 QMessageBox.warning(self.main, "Error", str(e))
 
@@ -224,6 +229,7 @@ class ActionHandler:
                 self.main.data_model.set_score_formula(formula)
                 self.main.refresh_table()
                 self.main.update_chart()
+                self.main.change_view(self.main.current_view)
             except ValueError as e:
                 QMessageBox.warning(self.main, "Invalid Formula", str(e))
 
@@ -236,6 +242,7 @@ class ActionHandler:
             self.main.refresh_table()
             self.main.update_chart()
             self.main.update_legends()
+            self.main.change_view(self.main.current_view)
         else:
             QMessageBox.warning(self.main, "Undo", "No more actions to undo.")
 
