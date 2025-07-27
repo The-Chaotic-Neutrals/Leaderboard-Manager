@@ -38,6 +38,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.data_models = load_multi(data_model.DataModel.SESSION_FILE) if os.path.exists(data_model.DataModel.SESSION_FILE) else [data_model.DataModel()]
 
         for dm in self.data_models:
+            dm.all_data_models = self.data_models
             self.page_selector.addItem(dm.page_name)
 
         self.current_page = 0
@@ -55,8 +56,10 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.change_view(self.current_view)
         self.update_legends()
 
-        # Shortcuts
-        shortcuts.setup_shortcuts(self)
+        self.undo_action = QAction("Undo", self)
+        self.open_action = QAction("Open", self)
+        self.save_action = QAction("Save", self)
+        self.reload_action = QAction("Reload", self)
 
         # Set action texts
         self.open_action.setText("Import Data (CSV/Excel)")
@@ -75,6 +78,26 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.file_menu.addAction(self.save_action)
         self.file_menu.addAction(self.undo_action)
         self.file_menu.addAction(self.reload_action)
+
+        # Add Model menu
+        self.model_menu = QMenu("Model", self)
+        self.menuBar().insertMenu(self.customize_menu.menuAction(), self.model_menu)
+        self.add_model_action = QAction("Add Model", self)
+        self.add_model_action.triggered.connect(self.action_handler.add_model)
+        self.model_menu.addAction(self.add_model_action)
+        self.remove_model_action = QAction("Remove Selected", self)
+        self.remove_model_action.triggered.connect(self.action_handler.remove_selected)
+        self.model_menu.addAction(self.remove_model_action)
+
+        # Add View menu
+        self.view_menu = QMenu("View", self)
+        self.menuBar().insertMenu(self.customize_menu.menuAction(), self.view_menu)
+        self.table_view_action = QAction("Table", self)
+        self.table_view_action.triggered.connect(lambda: self.view_selector.setCurrentText("Table"))
+        self.view_menu.addAction(self.table_view_action)
+        self.bar_view_action = QAction("Bar Chart", self)
+        self.bar_view_action.triggered.connect(lambda: self.view_selector.setCurrentText("Bar Chart"))
+        self.view_menu.addAction(self.bar_view_action)
 
         # Add Page menu
         self.page_menu = QMenu("Page", self)
@@ -104,6 +127,9 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.delete_column_action = QAction("Delete Column", self)
         self.delete_column_action.triggered.connect(self.action_handler.delete_column)
         self.column_menu.addAction(self.delete_column_action)
+
+        # Shortcuts
+        shortcuts.setup_shortcuts(self)
 
     def change_page(self, index):
         self.current_page = index
@@ -146,6 +172,8 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
 
     def reload_session(self):
         self.data_models = load_multi(data_model.DataModel.SESSION_FILE)
+        for dm in self.data_models:
+            dm.all_data_models = self.data_models
         self.page_selector.clear()
         for dm in self.data_models:
             self.page_selector.addItem(dm.page_name)

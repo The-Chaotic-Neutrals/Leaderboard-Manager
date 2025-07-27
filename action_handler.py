@@ -218,7 +218,7 @@ class ActionHandler:
         if not self.main.data_model.score_col:
             QMessageBox.warning(self.main, "No Score Column", "Set score column first.")
             return
-        formula, ok = QInputDialog.getText(self.main, "Set Score Formula", "Enter formula (e.g. {Column1} - {Column2}):", text=self.main.data_model.score_formula)
+        formula, ok = QInputDialog.getText(self.main, "Set Score Formula", "Enter formula (e.g. {Page1:Column1} - {Column2}):", text=self.main.data_model.score_formula)
         if ok and formula:
             try:
                 self.main.data_model.set_score_formula(formula)
@@ -247,10 +247,13 @@ class ActionHandler:
                 return
             dm = data_model.DataModel()
             dm.page_name = name
+            dm.all_data_models = self.main.data_models
             self.main.data_models.append(dm)
             self.main.page_selector.addItem(name)
             self.main.page_selector.setCurrentText(name)
             self.main.change_page(self.main.page_selector.currentIndex())
+            for existing_dm in self.main.data_models:
+                existing_dm.all_data_models = self.main.data_models
 
     def rename_page(self):
         old_name = self.main.data_model.page_name
@@ -259,8 +262,14 @@ class ActionHandler:
             if new_name in [dm.page_name for dm in self.main.data_models]:
                 QMessageBox.warning(self.main, "Duplicate Name", "Page name already exists.")
                 return
+            for dm in self.main.data_models:
+                dm.score_formula = dm.score_formula.replace(f"{{{old_name}:", f"{{{new_name}:")
+                dm.formula_cols = set(re.findall(r'\{(.*?)\}', dm.score_formula))
+                dm.recompute_all_overall()
             self.main.data_model.page_name = new_name
             self.main.page_selector.setItemText(self.main.current_page, new_name)
+            self.main.refresh_table()
+            self.main.update_chart()
 
     def delete_page(self):
         if len(self.main.data_models) == 1:
@@ -268,11 +277,15 @@ class ActionHandler:
             return
         reply = QMessageBox.question(self.main, "Confirm Delete", f"Are you sure you want to delete page '{self.main.data_model.page_name}'?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
+            del_name = self.main.data_model.page_name
             del self.main.data_models[self.main.current_page]
             self.main.page_selector.removeItem(self.main.current_page)
             self.main.current_page = min(self.main.current_page, len(self.main.data_models) - 1)
             self.main.page_selector.setCurrentIndex(self.main.current_page)
             self.main.change_page(self.main.current_page)
+            for dm in self.main.data_models:
+                dm.all_data_models = self.main.data_models
+                dm.recompute_all_overall()
 
     def add_model(self):
         model = self.main.model_input.text()
@@ -304,6 +317,14 @@ class ActionHandler:
             if ok2 and new_name and new_name != old_name:
                 try:
                     self.main.data_model.rename_column(old_name, new_name)
+                    page_name = self.main.data_model.page_name  # the page where column was renamed
+                    for dm in self.main.data_models:
+                        dm.score_formula = dm.score_formula.replace(f"{{{page_name}:{old_name}}}", f"{{{page_name}:{new_name}}}")
+                        if dm.page_name == page_name:
+                            dm.score_formula = dm.score_formula.replace(f"{{{old_name}}}", f"{{{new_name}}}")
+                        dm.formula_cols = set(re.findall(r'\{(.*?)\}', dm.score_formula))
+                        dm.recompute_all_overall()
+                        dm.save_to_history()
                     self.main.refresh_table()
                     self.main.update_chart()
                     self.main.update_legends()
@@ -378,6 +399,10 @@ class ActionHandler:
                     dm.save_to_history()
                     self.main.data_models.append(dm)
                     self.main.page_selector.addItem(page_name)
+                dm.all_data_models = self.main.data_models
+                for other_dm in self.main.data_models:
+                    other_dm.all_data_models = self.main.data_models
+                    other_dm.recompute_all_overall()
                 if page_name == self.main.data_model.page_name:
                     self.main.refresh_table()
                     self.main.update_chart()

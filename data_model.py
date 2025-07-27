@@ -20,6 +20,7 @@ class DataModel:
         self.formula_cols = set()
         self.score_tiers = []
         self.penalty_tiers = []
+        self.all_data_models = None  # Will be set by main
         self.set_column_types()
         self.save_to_history()
 
@@ -51,18 +52,34 @@ class DataModel:
         formula = self.score_formula
         if not formula:
             return 0
-        cols = re.findall(r'\{(.*?)\}', formula)
+        refs = re.findall(r'\{(.*?)\}', formula)
         values = {}
-        for col in cols:
-            val = row_dict.get(col, 0)
+        for ref in refs:
+            if ':' in ref:
+                page_name, col_name = ref.split(':', 1)
+                if page_name == self.page_name:
+                    val = row_dict.get(col_name, 0)
+                else:
+                    other_dm = next((dm for dm in self.all_data_models if dm.page_name == page_name), None)
+                    if other_dm:
+                        model = row_dict.get(self.model_col_name, '')
+                        matching = other_dm.df[other_dm.df[self.model_col_name] == model]
+                        if not matching.empty:
+                            val = matching.iloc[0].get(col_name, 0)
+                        else:
+                            val = 0
+                    else:
+                        val = 0
+            else:
+                val = row_dict.get(ref, 0)
             if isinstance(val, bool):
                 val = 1 if val else 0
             if not isinstance(val, (int, float)):
                 val = 0
-            values[col] = val
+            values[ref] = val
         expr = formula
-        for col in cols:
-            expr = expr.replace(f"{{{col}}}", str(values[col]))
+        for ref in refs:
+            expr = expr.replace(f"{{{ref}}}", str(values[ref]))
         try:
             return eval(expr)
         except:
@@ -123,9 +140,6 @@ class DataModel:
             self.score_col = new_name
         if old_name == self.penalty_col:
             self.penalty_col = new_name
-        if old_name in self.formula_cols:
-            self.score_formula = self.score_formula.replace(f"{{{old_name}}}", f"{{{new_name}}}")
-            self.formula_cols = set(re.findall(r'\{(.*?)\}', self.score_formula))
         self.save_to_history()
 
     def change_column_type(self, col, new_typ):
@@ -163,11 +177,26 @@ class DataModel:
         self.save_to_history()
 
     def set_score_formula(self, formula):
-        cols = set(re.findall(r'\{(.*?)\}', formula))
-        if self.score_col in cols:
+        refs = set(re.findall(r'\{(.*?)\}', formula))
+        if self.score_col in refs:
             raise ValueError("Formula cannot reference the score column itself.")
+        for ref in refs:
+            if ':' in ref:
+                page, col = ref.split(':', 1)
+                other_dm = next((dm for dm in self.all_data_models if dm.page_name == page), None)
+                if not other_dm:
+                    raise ValueError(f"Page {page} not found.")
+                if col not in other_dm.df.columns:
+                    raise ValueError(f"Column {col} not found in page {page}.")
+                if other_dm.column_types.get(col) not in ["integer", "float", "boolean"]:
+                    raise ValueError(f"Column {col} in page {page} is not numeric.")
+            else:
+                if ref not in self.df.columns:
+                    raise ValueError(f"Column {ref} not found.")
+                if self.column_types.get(ref) not in ["integer", "float", "boolean"]:
+                    raise ValueError(f"Column {ref} is not numeric.")
         self.score_formula = formula
-        self.formula_cols = cols
+        self.formula_cols = refs
         self.recompute_all_overall()
         self.save_to_history()
 
@@ -193,7 +222,7 @@ class DataModel:
         if parsed_val == old_val:
             return
         self.df.at[df_row, header] = parsed_val
-        if header != self.score_col and header in self.formula_cols:
+        if header != self.score_col and (header in self.formula_cols or any(header == r.split(':',1)[-1] and r.startswith(self.page_name + ':') for r in self.formula_cols)):
             self.df.at[df_row, self.score_col] = self.compute_overall(self.df.iloc[df_row].to_dict())
         self.save_to_history()
 
@@ -205,7 +234,11 @@ class DataModel:
         if col == self.penalty_col:
             raise ValueError("Cannot delete the penalty column.")
         if col in self.formula_cols:
-            raise ValueError("Cannot delete a column used in the score formula. Change the formula first if needed.")
+            raise ValueError("Column is used in the score formula. Change the formula first if needed.")
+        ref = f"{self.page_name}:{col}"
+        for dm in self.all_data_models:
+            if ref in dm.formula_cols:
+                raise ValueError(f"Column is used in a formula in page {dm.page_name}")
         self.df.drop(columns=[col], inplace=True)
         if col in self.column_types:
             del self.column_types[col]
