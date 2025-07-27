@@ -48,11 +48,8 @@ def setup_shortcuts(window):
 
     window.change_type_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_T))
 
-    window.set_score_col_action.setShortcut(QKeySequence(Qt.CTRL + Qt.ALT + Qt.Key_S))
-    window.set_penalty_col_action.setShortcut(QKeySequence(Qt.CTRL + Qt.ALT + Qt.Key_P))
     window.set_formula_action.setShortcut(QKeySequence(Qt.CTRL + Qt.Key_F))
     window.score_tiers_action.setShortcut(QKeySequence(Qt.CTRL + Qt.ALT + Qt.Key_T))
-    window.penalty_tiers_action.setShortcut(QKeySequence(Qt.CTRL + Qt.ALT + Qt.Key_Y))
     window.font_size_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_S))
     window.font_family_action.setShortcut(QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_F))
 

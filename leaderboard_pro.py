@@ -3,7 +3,7 @@ import sys
 import os
 import pandas as pd
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QMessageBox, QLabel, QMenu, QAction
+    QApplication, QMainWindow, QMessageBox, QLabel, QMenu, QAction, QWidget, QVBoxLayout
 )
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import Qt
@@ -42,6 +42,10 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
             dm.all_data_models = self.data_models
             self.page_selector.addItem(dm.page_name)
 
+        # Recompute after all models are loaded and all_data_models is set
+        if self.data_models:
+            self.data_models[0].recompute_all_computed()
+
         self.current_page = 0
         self.page_selector.setCurrentIndex(0)
         self.data_model = self.data_models[self.current_page]
@@ -53,8 +57,11 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
 
         self.page_selector.currentIndexChanged.connect(self.change_page)
         self.chart_type_selector.currentTextChanged.connect(self.update_chart)
+        self.primary_combo.currentTextChanged.connect(self.on_primary_changed)
+        self.secondary_combo.currentTextChanged.connect(self.on_secondary_changed)
         self.chart_type_selector.hide()  # Hide initially
         self.apply_styles()
+        self.update_plot_combos()
         self.refresh_table()
         self.change_view(self.current_view)
         self.update_legends()
@@ -142,6 +149,16 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         # Shortcuts
         shortcuts.setup_shortcuts(self)
 
+    def on_primary_changed(self, text):
+        col = None if text == "None" else text
+        self.data_model.plot_primary = col
+        self.update_chart()
+
+    def on_secondary_changed(self, text):
+        col = None if text == "None" else text
+        self.data_model.plot_secondary = col
+        self.update_chart()
+
     def toggle_legends(self, checked):
         self.show_legends = checked
         self.change_view(self.current_view)
@@ -150,6 +167,7 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.current_page = index
         self.data_model = self.data_models[index]
         self.refresh_table()
+        self.update_plot_combos()
         self.update_chart()
         self.update_legends()
         self.change_view(self.current_view)
@@ -238,45 +256,52 @@ class LeaderboardPro(QMainWindow, Ui_LeaderboardPro):
         self.style_handler.change_font_family()
 
     def update_legends(self):
-        # Update score legend
-        if self.data_model.score_col:
-            layout = self.legend_widget.layout()
-            while layout.count() > 1:
-                item = layout.takeAt(1)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
-            legend_title = layout.itemAt(0).widget()
-            score_name = self.data_model.score_col
-            legend_title.setText(f"{score_name} Color Legend")
-            legend_title.setStyleSheet("color: #3498db; font-weight: bold;")
-            for _, text, color in self.data_model.score_tiers:
-                label = QLabel(text)
-                label.setStyleSheet(f"color: {color};")
-                layout.addWidget(label)
-            self.legend_widget.show()
-        else:
-            self.legend_widget.hide()
+        layout = self.control_layout
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        for col in sorted(self.data_model.column_tiers.keys()):
+            widget = QWidget()
+            wlayout = QVBoxLayout(widget)
+            title = QLabel(f"{col} Color Legend")
+            title.setStyleSheet("color: #3498db; font-weight: bold;")
+            wlayout.addWidget(title)
+            is_achievement, tiers = self.data_model.column_tiers[col]
+            if is_achievement:
+                for _, text, color in tiers:
+                    label = QLabel(text)
+                    label.setStyleSheet(f"color: {color};")
+                    wlayout.addWidget(label)
+            else:
+                for _, _, text, color in tiers:
+                    label = QLabel(text)
+                    label.setStyleSheet(f"color: {color};")
+                    wlayout.addWidget(label)
+            widget.setStyleSheet("background-color: rgba(17,17,17,128); border: 1px solid #3498db; border-radius: 5px;")
+            layout.addWidget(widget)
+        layout.addStretch()
 
-        # Update penalty legend
-        if self.data_model.penalty_col:
-            layout = self.abnormal_legend_widget.layout()
-            while layout.count() > 1:
-                item = layout.takeAt(1)
-                widget = item.widget()
-                if widget:
-                    widget.deleteLater()
-            abnormal_legend_title = layout.itemAt(0).widget()
-            penalty_name = self.data_model.penalty_col
-            abnormal_legend_title.setText(f"{penalty_name} Color Legend")
-            abnormal_legend_title.setStyleSheet("color: #3498db; font-weight: bold;")
-            for _, _, text, color in self.data_model.penalty_tiers:
-                label = QLabel(text)
-                label.setStyleSheet(f"color: {color};")
-                layout.addWidget(label)
-            self.abnormal_legend_widget.show()
+    def update_plot_combos(self):
+        numeric_cols = ["None"] + [col for col, typ in self.data_model.column_types.items() if typ in ["integer", "float", "boolean"]]
+        self.primary_combo.blockSignals(True)
+        self.primary_combo.clear()
+        self.primary_combo.addItems(numeric_cols)
+        if self.data_model.plot_primary:
+            self.primary_combo.setCurrentText(self.data_model.plot_primary)
         else:
-            self.abnormal_legend_widget.hide()
+            self.primary_combo.setCurrentIndex(0)
+        self.primary_combo.blockSignals(False)
+
+        self.secondary_combo.blockSignals(True)
+        self.secondary_combo.clear()
+        self.secondary_combo.addItems(numeric_cols)
+        if self.data_model.plot_secondary:
+            self.secondary_combo.setCurrentText(self.data_model.plot_secondary)
+        else:
+            self.secondary_combo.setCurrentIndex(0)
+        self.secondary_combo.blockSignals(False)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

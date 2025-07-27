@@ -174,6 +174,3 @@ class StyleHandler:
                 background: #111;
             }}
         """)
-        # Update legend styles
-        self.main.legend_widget.setStyleSheet("background-color: rgba(17,17,17,128); border: 1px solid #3498db; border-radius: 5px;")
-        self.main.abnormal_legend_widget.setStyleSheet("background-color: rgba(17,17,17,128); border: 1px solid #3498db; border-radius: 5px;")

@@ -15,49 +15,86 @@ def load_multi(session_file):
         dm = data_model.DataModel()
         dm.df = df.fillna('')
         dm.set_column_types()
-        dm.score_formula = ""  # Default
-        dm.formula_cols = set()
         dm.page_name = "Default"
         return [dm]
     metadata = pd.read_excel(xls, 'Metadata')
     dms = []
     for _, row in metadata.iterrows():
         page_name = row['page_name']
-        formula = row['formula'] if pd.notna(row['formula']) else ""
-        score_col = row['score_col'] if pd.notna(row['score_col']) else None
-        penalty_col = row['penalty_col'] if pd.notna(row['penalty_col']) else None
         df = pd.read_excel(xls, page_name)
         dm = data_model.DataModel()
         dm.page_name = page_name
         dm.df = df.fillna('')
         dm.set_column_types()
-        dm.score_formula = formula
-        dm.formula_cols = set(re.findall(r'\{(.*?)\}', formula))
-        dm.score_col = score_col
-        dm.penalty_col = penalty_col
-        dm.recompute_all_overall()
+        # Load formulas
+        if 'formulas_str' in row and pd.notna(row['formulas_str']):
+            strs = row['formulas_str'].split('|')
+            for s in strs:
+                if ':' in s:
+                    c, f = s.split(':', 1)
+                    dm.column_formulas[c] = f.replace('||', '|')
+                    dm.column_formula_refs[c] = set(re.findall(r'\{(.*?)\}', dm.column_formulas[c]))
         # Load tiers
-        if 'score_tiers_str' in row and pd.notna(row['score_tiers_str']):
-            strs = row['score_tiers_str'].split('|')
-            tiers = []
+        if 'tiers_str' in row and pd.notna(row['tiers_str']):
+            strs = row['tiers_str'].split('|')
             for s in strs:
-                parts = s.split(',', 2)
-                minv = float(parts[0])
-                label = parts[1]
-                color = parts[2]
-                tiers.append((minv, label, color))
-            dm.score_tiers = sorted(tiers, key=lambda x: x[0], reverse=True)
-        if 'penalty_tiers_str' in row and pd.notna(row['penalty_tiers_str']):
-            strs = row['penalty_tiers_str'].split('|')
-            tiers = []
-            for s in strs:
-                parts = s.split(',', 3)
-                minv = float(parts[0])
-                maxv = float(parts[1])
-                label = parts[2]
-                color = parts[3]
-                tiers.append((minv, maxv, label, color))
-            dm.penalty_tiers = sorted(tiers, key=lambda x: x[0])
+                if ':' in s:
+                    parts = s.split(':')
+                    c = parts[0]
+                    typ_tiers = parts[1]
+                    typ, tiers_str = typ_tiers.split(';', 1)
+                    is_ach = typ == 'a'
+                    tier_list = []
+                    tier_strs = tiers_str.split(';')
+                    for ts in tier_strs:
+                        tp = ts.split(',')
+                        if is_ach:
+                            minv = float(tp[0])
+                            label = tp[1]
+                            color = tp[2]
+                            tier_list.append((minv, label, color))
+                        else:
+                            minv = float(tp[0])
+                            max_str = tp[1]
+                            maxv = float('inf') if max_str == 'inf' else float(max_str)
+                            label = tp[2]
+                            color = tp[3]
+                            tier_list.append((minv, maxv, label, color))
+                    dm.column_tiers[c] = (is_ach, tier_list)
+        # Backwards compat
+        if 'score_col' in row and pd.notna(row['score_col']):
+            score_col = row['score_col']
+            formula = row['formula'] if pd.notna(row['formula']) else ""
+            if formula:
+                dm.column_formulas[score_col] = formula
+                dm.column_formula_refs[score_col] = set(re.findall(r'\{(.*?)\}', formula))
+            if 'score_tiers_str' in row and pd.notna(row['score_tiers_str']):
+                strs = row['score_tiers_str'].split('|')
+                tiers = []
+                for s in strs:
+                    parts = s.split(',', 2)
+                    minv = float(parts[0])
+                    label = parts[1]
+                    color = parts[2]
+                    tiers.append((minv, label, color))
+                dm.column_tiers[score_col] = (True, sorted(tiers, key=lambda x: x[0], reverse=True))
+        if 'penalty_col' in row and pd.notna(row['penalty_col']):
+            penalty_col = row['penalty_col']
+            if 'penalty_tiers_str' in row and pd.notna(row['penalty_tiers_str']):
+                strs = row['penalty_tiers_str'].split('|')
+                tiers = []
+                for s in strs:
+                    parts = s.split(',', 3)
+                    minv = float(parts[0])
+                    maxv = float(parts[1]) if parts[1] != 'inf' else float('inf')
+                    label = parts[2]
+                    color = parts[3]
+                    tiers.append((minv, maxv, label, color))
+                dm.column_tiers[penalty_col] = (False, sorted(tiers, key=lambda x: x[0]))
+        if 'plot_primary' in row and pd.notna(row['plot_primary']):
+            dm.plot_primary = row['plot_primary']
+        if 'plot_secondary' in row and pd.notna(row['plot_secondary']):
+            dm.plot_secondary = row['plot_secondary']
         dms.append(dm)
     return dms
 
@@ -65,11 +102,26 @@ def save_multi(dms, session_file):
     with pd.ExcelWriter(session_file) as writer:
         metadata = []
         for dm in dms:
-            meta = {'page_name': dm.page_name, 'formula': dm.score_formula}
-            meta['score_col'] = dm.score_col
-            meta['penalty_col'] = dm.penalty_col
-            meta['score_tiers_str'] = '|'.join([f"{m},{l},{c}" for m, l, c in dm.score_tiers])
-            meta['penalty_tiers_str'] = '|'.join([f"{m},{mx},{l},{c}" for m, mx, l, c in dm.penalty_tiers])
+            meta = {'page_name': dm.page_name}
+            formulas_str = '|'.join([f"{c}:{f.replace('|', '||')}" for c, f in dm.column_formulas.items()])
+            meta['formulas_str'] = formulas_str if formulas_str else None
+            tiers_str_list = []
+            for c, (is_ach, tiers) in dm.column_tiers.items():
+                inner = []
+                for tier in tiers:
+                    if is_ach:
+                        ts = ','.join([str(tier[0]), tier[1], tier[2]])
+                    else:
+                        max_str = 'inf' if tier[1] == float('inf') else str(tier[1])
+                        ts = ','.join([str(tier[0]), max_str, tier[2], tier[3]])
+                    inner.append(ts)
+                tiers_inner = ';'.join(inner)
+                typ = 'a' if is_ach else 'p'
+                tiers_str_list.append(f"{c}:{typ};{tiers_inner}")
+            tiers_str = '|'.join(tiers_str_list)
+            meta['tiers_str'] = tiers_str if tiers_str else None
+            meta['plot_primary'] = dm.plot_primary
+            meta['plot_secondary'] = dm.plot_secondary
             metadata.append(meta)
         pd.DataFrame(metadata).to_excel(writer, sheet_name='Metadata', index=False)
         for dm in dms:
