@@ -1,7 +1,6 @@
 # chart_handler.py
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-import colors
 
 class ChartHandler:
     def __init__(self, main):
@@ -32,34 +31,28 @@ class ChartHandler:
         self.main.figure.patch.set_facecolor("#000")
 
         if not self.main.data_model.df.empty:
-            # Sort df by Overall for consistent ordering
-            sorted_df = self.main.data_model.df.sort_values(by=self.main.data_model.overall_col, ascending=False)
+            # Sort df by score_col for consistent ordering
+            sort_col = self.main.data_model.score_col if self.main.data_model.score_col else self.main.data_model.model_col_name
+            sorted_df = self.main.data_model.df.sort_values(by=sort_col, ascending=False)
 
             if self.main.current_view == "Bar Chart":
                 bar_width = 0.4
                 x = range(len(sorted_df))
-                retrieval_colors = [colors.get_color_for_score(row[self.main.data_model.overall_col]).name() for _, row in sorted_df.iterrows()]
-                abnormal_colors = [colors.get_color_for_abnormal(row[self.main.data_model.abnormal_col]).name() for _, row in sorted_df.iterrows()]
-                self.main.ax.bar(x, sorted_df[self.main.data_model.retrieval_col], width=bar_width, color=retrieval_colors)
-                self.main.ax.bar([i + bar_width for i in x], sorted_df[self.main.data_model.abnormal_col], width=bar_width, color=abnormal_colors)
+                score_colors = [self.main.data_model.get_score_color(row[self.main.data_model.score_col]).name() if self.main.data_model.score_col else "#FFFFFF" for _, row in sorted_df.iterrows()]
+                penalty_colors = [self.main.data_model.get_penalty_color(row[self.main.data_model.penalty_col]).name() if self.main.data_model.penalty_col else "#FFFFFF" for _, row in sorted_df.iterrows()]
+                score_values = sorted_df[self.main.data_model.score_col] if self.main.data_model.score_col else [0] * len(sorted_df)
+                penalty_values = sorted_df[self.main.data_model.penalty_col] if self.main.data_model.penalty_col else [0] * len(sorted_df)
+                self.main.ax.bar(x, score_values, width=bar_width, color=score_colors)
+                self.main.ax.bar([i + bar_width for i in x], penalty_values, width=bar_width, color=penalty_colors)
                 self.main.ax.set_xticks([i + bar_width / 2 for i in x])
                 self.main.ax.set_xticklabels(sorted_df["Model"], rotation=35, ha="right", color="white", fontsize=tick_fontsize)
-                self.main.ax.set_title("Model Scores (Left: Retrieval, Right: Abnormal Behavior)", color="white", fontsize=title_fontsize)
+                score_name = self.main.data_model.score_col or "N/A"
+                penalty_name = self.main.data_model.penalty_col or "N/A"
+                self.main.ax.set_title(f"Model Scores (Left: {score_name}, Right: {penalty_name})", color="white", fontsize=title_fontsize)
 
-                # Useful legend for tiers, more vertical and thinner
-                handles = [
-                    Patch(color='#EE82EE', label='Leviathan Overall (>=90)'),
-                    Patch(color='#D3D3D3', label='N/A Abnormal Behavior (=0)'),
-                    Patch(color='#FFD700', label='Gold Overall (>=75)'),
-                    Patch(color='#40A040', label='Minimal Abnormal Behavior (1-5)'),
-                    Patch(color='#C0C0C0', label='Silver Overall (>=50)'),
-                    Patch(color='#0028FF', label='Low Abnormal Behavior (6-10)'),
-                    Patch(color='#CD7F32', label='Bronze Overall (>=25)'),
-                    Patch(color='#808080', label='Moderate Abnormal Behavior (11-15)'),
-                    Patch(color='#8B4513', label='Subpar Overall (Rest)'),
-                    Patch(color='#3280CD', label='High Abnormal Behavior (16-20)'),
-                    Patch(color='#74BAEC', label='Severe Abnormal Behavior (>20)')
-                ]
+                # Legend
+                handles = [Patch(color=color, label=label) for _, label, color in self.main.data_model.score_tiers]
+                handles += [Patch(color=color, label=label) for _, _, label, color in self.main.data_model.penalty_tiers]
                 self.main.ax.legend(handles=handles, bbox_to_anchor=(1.02, 1), loc='upper left', facecolor="#000", edgecolor="#FFFFFF", labelcolor="#FFFFFF", fontsize=legend_fontsize, ncol=1)
 
             self.main.ax.tick_params(axis='both', colors='white', labelsize=tick_fontsize)

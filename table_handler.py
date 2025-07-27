@@ -3,7 +3,6 @@ from PyQt5.QtWidgets import QTableWidgetItem, QMessageBox
 from PyQt5.QtGui import QColor
 from PyQt5.QtCore import Qt
 import pandas as pd
-import colors
 
 class TableHandler:
     def __init__(self, main):
@@ -11,6 +10,7 @@ class TableHandler:
         self.main.table.itemChanged.connect(self.handle_cell_change)
         self.main.table.horizontalHeader().sortIndicatorChanged.connect(self.on_sort_changed)
         self.main.table.horizontalHeader().sectionResized.connect(self.on_section_resized)
+        self.main.table.itemClicked.connect(self.handle_item_clicked)
         self.min_widths = []
 
     def on_sort_changed(self, col, order):
@@ -34,25 +34,31 @@ class TableHandler:
             model_col = -1  # Fallback, but assume present
         for i, row in self.main.data_model.df.iterrows():
             for j, val in enumerate(row):
-                item = QTableWidgetItem(str(val) if pd.notna(val) else '')
                 header = self.main.data_model.df.columns[j]
-                if header == self.main.data_model.overall_col:  # Overall
-                    bg_color = colors.get_color_for_score(val)
-                elif header == self.main.data_model.abnormal_col:  # Abnormal Behavior
-                    bg_color = colors.get_color_for_abnormal(val)
+                typ = self.main.data_model.column_types.get(header)
+                if typ == "boolean":
+                    item = QTableWidgetItem()
+                    item.setFlags(Qt.ItemIsEnabled)
+                    item.setCheckState(Qt.Checked if val else Qt.Unchecked)
+                else:
+                    item = QTableWidgetItem(str(val) if pd.notna(val) else '')
+                    if typ in ["integer", "float"]:
+                        try:
+                            num_val = float(val) if pd.notna(val) else 0.0
+                            item.setData(Qt.UserRole, num_val)
+                        except ValueError:
+                            pass
+                if header == self.main.data_model.score_col:  # Score
+                    bg_color = self.main.data_model.get_score_color(val)
+                elif header == self.main.data_model.penalty_col:  # Penalty
+                    bg_color = self.main.data_model.get_penalty_color(val)
                 else:
                     bg_color = QColor("transparent")
                 if bg_color.alpha() > 0:
                     bg_color.setAlpha(180)
                 item.setBackground(bg_color)
-                fg_color = QColor("black") if colors.is_light_color(bg_color) else QColor("white")
+                fg_color = QColor("black") if self.is_light_color(bg_color) else QColor("white")
                 item.setForeground(fg_color)
-                if self.main.data_model.column_types.get(header) in ["integer", "float"]:
-                    try:
-                        num_val = float(val) if pd.notna(val) else 0.0
-                        item.setData(Qt.UserRole, num_val)
-                    except ValueError:
-                        pass
                 if j == model_col:
                     item.setData(self.main.DF_ROW_ROLE, int(i))
                 self.main.table.setItem(i, j, item)
@@ -69,6 +75,9 @@ class TableHandler:
         visual_row = item.row()
         col = item.column()
         header = self.main.data_model.df.columns[col]
+        typ = self.main.data_model.column_types.get(header)
+        if typ == "boolean":
+            return  # Handled separately
         model_col = self.main.data_model.df.columns.get_loc(self.main.data_model.model_col_name)
         model_item = self.main.table.item(visual_row, model_col)
         if model_item:
@@ -77,9 +86,89 @@ class TableHandler:
                 val = item.text()
                 try:
                     self.main.data_model.update_cell(df_row, header, val)
-                    self.refresh_table()
+                    # Update the changed item
+                    new_val = self.main.data_model.df.at[df_row, header]
+                    item.setText(str(new_val))
+                    if typ in ["integer", "float"]:
+                        try:
+                            num_val = float(new_val)
+                            item.setData(Qt.UserRole, num_val)
+                        except ValueError:
+                            pass
+                    bg_color = self.main.data_model.get_score_color(new_val) if header == self.main.data_model.score_col else self.main.data_model.get_penalty_color(new_val) if header == self.main.data_model.penalty_col else QColor("transparent")
+                    if bg_color.alpha() > 0:
+                        bg_color.setAlpha(180)
+                    item.setBackground(bg_color)
+                    fg_color = QColor("black") if self.is_light_color(bg_color) else QColor("white")
+                    item.setForeground(fg_color)
+
+                    # If affects score, update score cell
+                    if header != self.main.data_model.score_col and header in self.main.data_model.formula_cols and self.main.data_model.score_col:
+                        score_col = self.main.data_model.df.columns.get_loc(self.main.data_model.score_col)
+                        score_item = self.main.table.item(visual_row, score_col)
+                        if score_item:
+                            score_val = self.main.data_model.df.at[df_row, self.main.data_model.score_col]
+                            score_item.setText(str(score_val))
+                            if self.main.data_model.column_types.get(self.main.data_model.score_col) in ["integer", "float"]:
+                                try:
+                                    num_val = float(score_val)
+                                    score_item.setData(Qt.UserRole, num_val)
+                                except ValueError:
+                                    pass
+                            bg_color = self.main.data_model.get_score_color(score_val)
+                            if bg_color.alpha() > 0:
+                                bg_color.setAlpha(180)
+                            score_item.setBackground(bg_color)
+                            fg_color = QColor("black") if self.is_light_color(bg_color) else QColor("white")
+                            score_item.setForeground(fg_color)
                 except ValueError as e:
-                    self.main.table.blockSignals(True)
-                    item.setText(str(self.main.data_model.df.at[df_row, header]))
-                    self.main.table.blockSignals(False)
                     QMessageBox.warning(self.main, "Invalid Input", str(e))
+                    # Revert text
+                    item.setText(str(self.main.data_model.df.at[df_row, header]))
+
+    def handle_item_clicked(self, item):
+        col = item.column()
+        header = self.main.data_model.df.columns[col]
+        if self.main.data_model.column_types.get(header) == "boolean":
+            current_state = item.checkState()
+            new_state = Qt.Unchecked if current_state == Qt.Checked else Qt.Checked
+            item.setCheckState(new_state)
+            model_col = self.main.data_model.df.columns.get_loc(self.main.data_model.model_col_name)
+            df_row = self.main.table.item(item.row(), model_col).data(self.main.DF_ROW_ROLE)
+            val = (new_state == Qt.Checked)
+            self.main.data_model.update_cell(df_row, header, val)
+            # Update color if score or penalty
+            bg_color = self.main.data_model.get_score_color(val) if header == self.main.data_model.score_col else self.main.data_model.get_penalty_color(val) if header == self.main.data_model.penalty_col else QColor("transparent")
+            if bg_color.alpha() > 0:
+                bg_color.setAlpha(180)
+            item.setBackground(bg_color)
+            fg_color = QColor("black") if self.is_light_color(bg_color) else QColor("white")
+            item.setForeground(fg_color)
+
+            # If affects score, update score cell
+            visual_row = item.row()
+            if header != self.main.data_model.score_col and header in self.main.data_model.formula_cols and self.main.data_model.score_col:
+                score_col = self.main.data_model.df.columns.get_loc(self.main.data_model.score_col)
+                score_item = self.main.table.item(visual_row, score_col)
+                if score_item:
+                    score_val = self.main.data_model.df.at[df_row, self.main.data_model.score_col]
+                    score_item.setText(str(score_val))
+                    if self.main.data_model.column_types.get(self.main.data_model.score_col) in ["integer", "float"]:
+                        try:
+                            num_val = float(score_val)
+                            score_item.setData(Qt.UserRole, num_val)
+                        except ValueError:
+                            pass
+                    bg_color = self.main.data_model.get_score_color(score_val)
+                    if bg_color.alpha() > 0:
+                        bg_color.setAlpha(180)
+                    score_item.setBackground(bg_color)
+                    fg_color = QColor("black") if self.is_light_color(bg_color) else QColor("white")
+                    score_item.setForeground(fg_color)
+
+    def is_light_color(self, color):
+        r = color.red() / 255.0
+        g = color.green() / 255.0
+        b = color.blue() / 255.0
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        return luminance > 0.5

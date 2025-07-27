@@ -2,8 +2,8 @@
 import random
 import os
 import matplotlib
-matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
+matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QKeySequence, QFont, QFontDatabase, QPainter, QColor, QIcon
 from PyQt5.QtCore import Qt, QTimer, QPointF
-import colors
 
 class FloatingPixelsWidget(QWidget):
     def __init__(self, parent=None, pixel_count=100):
@@ -96,71 +95,36 @@ class Ui_LeaderboardPro(object):
         legend_layout = QVBoxLayout(self.legend_widget)
         legend_layout.setContentsMargins(5, 5, 5, 5)
         legend_layout.setSpacing(2)
-        legend_title = QLabel("Overall Color Legend")
+        legend_title = QLabel("Score Color Legend")
         legend_layout.addWidget(legend_title)
-        for text, color in colors.OVERALL_COLOR_DEFS:
-            label = QLabel(text)
-            legend_layout.addWidget(label)
         self.left_layout.addWidget(self.legend_widget)
 
         self.abnormal_legend_widget = QWidget()
         abnormal_legend_layout = QVBoxLayout(self.abnormal_legend_widget)
         abnormal_legend_layout.setContentsMargins(5, 5, 5, 5)
         abnormal_legend_layout.setSpacing(2)
-        abnormal_legend_title = QLabel("Abnormal Behavior Color Legend")
+        abnormal_legend_title = QLabel("Penalty Color Legend")
         abnormal_legend_layout.addWidget(abnormal_legend_title)
-        for text, color in colors.ABNORMAL_COLOR_DEFS:
-            label = QLabel(text)
-            abnormal_legend_layout.addWidget(label)
         self.left_layout.addWidget(self.abnormal_legend_widget)
 
         self.control_layout = QVBoxLayout()
         self.main_layout.addLayout(self.control_layout, 1)
 
+        self.page_label = QLabel("Page:")
+        self.control_layout.addWidget(self.page_label)
+
+        self.page_selector = QComboBox()
+        self.control_layout.addWidget(self.page_selector)
+
         self.model_input = QLineEdit()
-        self.model_input.setPlaceholderText("Model Name")
+        self.model_input.setPlaceholderText("New Model Name")
         self.control_layout.addWidget(self.model_input)
-
-        self.retrieval_input = QLineEdit()
-        self.retrieval_input.setPlaceholderText("Retrieval Score")
-        self.control_layout.addWidget(self.retrieval_input)
-
-        self.abnormal_behavior_input = QLineEdit()
-        self.abnormal_behavior_input.setPlaceholderText("Abnormal Behavior Score")
-        self.control_layout.addWidget(self.abnormal_behavior_input)
 
         self.add_btn = QPushButton("Add Model")
         self.control_layout.addWidget(self.add_btn)
 
-        self.add_column_btn = QPushButton("Add Column")
-        self.control_layout.addWidget(self.add_column_btn)
-
-        self.rename_column_btn = QPushButton("Rename Column")
-        self.control_layout.addWidget(self.rename_column_btn)
-
-        self.change_type_btn = QPushButton("Change Column Type")
-        self.control_layout.addWidget(self.change_type_btn)
-
-        self.delete_column_btn = QPushButton("Delete Column")
-        self.control_layout.addWidget(self.delete_column_btn)
-
         self.remove_btn = QPushButton("Remove Selected Model")
         self.control_layout.addWidget(self.remove_btn)
-
-        self.import_btn = QPushButton("Import Data (CSV/Excel)")
-        self.control_layout.addWidget(self.import_btn)
-
-        self.export_btn = QPushButton("Export Current Session")
-        self.control_layout.addWidget(self.export_btn)
-
-        self.save_btn = QPushButton("Save Session")
-        self.control_layout.addWidget(self.save_btn)
-
-        self.undo_btn = QPushButton("Undo")
-        self.control_layout.addWidget(self.undo_btn)
-
-        self.set_formula_btn = QPushButton("Set Overall Formula")
-        self.control_layout.addWidget(self.set_formula_btn)
 
         self.view_label = QLabel("View Mode:")
         self.control_layout.addWidget(self.view_label)
@@ -172,8 +136,18 @@ class Ui_LeaderboardPro(object):
         self.control_layout.addStretch()
 
         self.menubar = LeaderboardPro.menuBar()
-        self.view_menu = self.menubar.addMenu("View")
+        self.customize_menu = self.menubar.addMenu("Customize")
+        self.set_score_col_action = QAction("Set Score Column")
+        self.customize_menu.addAction(self.set_score_col_action)
+        self.set_penalty_col_action = QAction("Set Penalty Column")
+        self.customize_menu.addAction(self.set_penalty_col_action)
+        self.set_formula_action = QAction("Set Score Formula")
+        self.customize_menu.addAction(self.set_formula_action)
+        self.score_tiers_action = QAction("Manage Score Tiers")
+        self.customize_menu.addAction(self.score_tiers_action)
+        self.penalty_tiers_action = QAction("Manage Penalty Tiers")
+        self.customize_menu.addAction(self.penalty_tiers_action)
         self.font_size_action = QAction("Change Font Size")
-        self.view_menu.addAction(self.font_size_action)
+        self.customize_menu.addAction(self.font_size_action)
         self.font_family_action = QAction("Change Font Family")
-        self.view_menu.addAction(self.font_family_action)
+        self.customize_menu.addAction(self.font_family_action)

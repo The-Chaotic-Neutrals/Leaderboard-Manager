@@ -1,7 +1,6 @@
 # style_handler.py
-from PyQt5.QtWidgets import QApplication, QInputDialog, QLabel
-from PyQt5.QtGui import QColor, QFontDatabase
-import colors
+from PyQt5.QtWidgets import QApplication, QInputDialog
+from PyQt5.QtGui import QFontDatabase
 
 class StyleHandler:
     def __init__(self, main):
@@ -33,7 +32,7 @@ class StyleHandler:
                 font-size: {self.main.font_size}px;
             }}
             QTableView {{
-                background-color: rgba(0, 0, 0, 128);
+               background-color: rgba(0, 0, 0, 128);
             }}
             QTableWidget {{
                 background-color: rgba(0, 0, 0, 128);
@@ -178,25 +177,3 @@ class StyleHandler:
         # Update legend styles
         self.main.legend_widget.setStyleSheet("background-color: rgba(17,17,17,128); border: 1px solid #3498db; border-radius: 5px;")
         self.main.abnormal_legend_widget.setStyleSheet("background-color: rgba(17,17,17,128); border: 1px solid #3498db; border-radius: 5px;")
-
-        # Set colors for overall legend
-        layout = self.main.legend_widget.layout()
-        for i in range(layout.count()):
-            widget = layout.itemAt(i).widget()
-            if isinstance(widget, QLabel):
-                if i == 0:  # Title
-                    widget.setStyleSheet("color: #3498db; font-weight: bold;")
-                else:
-                    color = colors.OVERALL_COLOR_DEFS[i-1][1]
-                    widget.setStyleSheet(f"color: {color};")
-
-        # Set colors for abnormal legend
-        layout = self.main.abnormal_legend_widget.layout()
-        for i in range(layout.count()):
-            widget = layout.itemAt(i).widget()
-            if isinstance(widget, QLabel):
-                if i == 0:  # Title
-                    widget.setStyleSheet("color: #3498db; font-weight: bold;")
-                else:
-                    color = colors.ABNORMAL_COLOR_DEFS[i-1][1]
-                    widget.setStyleSheet(f"color: {color};")
