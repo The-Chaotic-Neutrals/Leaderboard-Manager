@@ -340,25 +340,34 @@ class DataModel:
         self.plot_columns = [c for c in self.plot_columns if c != col]
         self.save_to_history()
 
-    def set_column_tiers(self, col, is_min_threshold, tiers):
+    def set_column_tiers(self, col, tier_mode, tiers):
         if col not in self.df.columns:
             raise ValueError("Column does not exist.")
-        if self.column_types.get(col) not in ["integer", "float", "boolean"]:
-            raise ValueError("Column must be numeric.")
-        self.column_tiers[col] = (is_min_threshold, tiers)
+        typ = self.column_types.get(col)
+        if typ in ["integer", "float", "boolean"] and tier_mode == "string":
+            raise ValueError("String mode invalid for numeric column.")
+        if typ == "string" and tier_mode not in ["string"]:
+            raise ValueError("Only string mode for string column.")
+        self.column_tiers[col] = (tier_mode, tiers)
         self.save_to_history()
 
     def get_column_color(self, col, value):
         if col not in self.column_tiers:
             return QColor("transparent")
-        is_min_threshold, tiers = self.column_tiers[col]
+        tier_mode, tiers = self.column_tiers[col]
         try:
-            value = float(value)
-            if is_min_threshold:
+            if tier_mode == "string":
+                value_str = str(value)
+                for pattern, _, color in tiers:
+                    if value_str == pattern:
+                        return QColor(color)
+            elif tier_mode == "min_threshold":
+                value = float(value)
                 for min_val, _, color in tiers:
                     if value >= min_val:
                         return QColor(color)
-            else:
+            elif tier_mode == "range":
+                value = float(value)
                 for min_val, max_val, _, color in tiers:
                     if min_val <= value <= max_val:
                         return QColor(color)

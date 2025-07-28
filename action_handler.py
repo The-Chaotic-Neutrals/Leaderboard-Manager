@@ -7,15 +7,23 @@ import file_io
 import re
 
 class TiersDialog(QDialog):
-    def __init__(self, parent, is_min_threshold=True, current_tiers=[]):
+    def __init__(self, parent, is_min_threshold=True, current_tiers=[], mode="numeric"):
         super().__init__(parent)
+        self.mode = mode
         self.is_min_threshold = is_min_threshold
-        self.setWindowTitle("Manage Min Threshold Tiers" if is_min_threshold else "Manage Range Tiers")
+        if self.mode == "numeric":
+            self.setWindowTitle("Manage Min Threshold Tiers" if is_min_threshold else "Manage Range Tiers")
+        else:
+            self.setWindowTitle("Manage String Match Tiers")
         layout = QVBoxLayout()
         self.table = QTableWidget()
-        col_count = 3 if is_min_threshold else 4
+        if self.mode == "numeric":
+            col_count = 3 if is_min_threshold else 4
+            headers = ["Min", "Label", "Color"] if is_min_threshold else ["Min", "Max", "Label", "Color"]
+        else:
+            col_count = 3
+            headers = ["Pattern", "Label", "Color"]
         self.table.setColumnCount(col_count)
-        headers = ["Min", "Label", "Color"] if is_min_threshold else ["Min", "Max", "Label", "Color"]
         self.table.setHorizontalHeaderLabels(headers)
         layout.addWidget(self.table)
         buttons = QHBoxLayout()
@@ -38,43 +46,61 @@ class TiersDialog(QDialog):
     def populate(self, tiers):
         self.table.setRowCount(len(tiers))
         for r, tier in enumerate(tiers):
-            min_item = QTableWidgetItem(str(tier[0]))
-            self.table.setItem(r, 0, min_item)
-            if self.is_min_threshold:
+            if self.mode == "numeric":
+                min_item = QTableWidgetItem(str(tier[0]))
+                self.table.setItem(r, 0, min_item)
+                if self.is_min_threshold:
+                    label_item = QTableWidgetItem(tier[1])
+                    self.table.setItem(r, 1, label_item)
+                    color_item = QTableWidgetItem(tier[2])
+                    color_item.setBackground(QColor(tier[2]))
+                    self.table.setItem(r, 2, color_item)
+                else:
+                    max_str = "inf" if tier[1] == float('inf') else str(tier[1])
+                    max_item = QTableWidgetItem(max_str)
+                    self.table.setItem(r, 1, max_item)
+                    label_item = QTableWidgetItem(tier[2])
+                    self.table.setItem(r, 2, label_item)
+                    color_item = QTableWidgetItem(tier[3])
+                    color_item.setBackground(QColor(tier[3]))
+                    self.table.setItem(r, 3, color_item)
+            else:
+                pattern_item = QTableWidgetItem(tier[0])
+                self.table.setItem(r, 0, pattern_item)
                 label_item = QTableWidgetItem(tier[1])
                 self.table.setItem(r, 1, label_item)
                 color_item = QTableWidgetItem(tier[2])
                 color_item.setBackground(QColor(tier[2]))
                 self.table.setItem(r, 2, color_item)
-            else:
-                max_str = "inf" if tier[1] == float('inf') else str(tier[1])
-                max_item = QTableWidgetItem(max_str)
-                self.table.setItem(r, 1, max_item)
-                label_item = QTableWidgetItem(tier[2])
-                self.table.setItem(r, 2, label_item)
-                color_item = QTableWidgetItem(tier[3])
-                color_item.setBackground(QColor(tier[3]))
-                self.table.setItem(r, 3, color_item)
 
     def get_tiers(self):
         tiers = []
         for r in range(self.table.rowCount()):
             try:
-                minv = float(self.table.item(r, 0).text())
-                if self.is_min_threshold:
+                if self.mode == "numeric":
+                    minv = float(self.table.item(r, 0).text())
+                    if self.is_min_threshold:
+                        label = self.table.item(r, 1).text()
+                        color = self.table.item(r, 2).text()
+                        tiers.append((minv, label, color))
+                    else:
+                        max_str = self.table.item(r, 1).text()
+                        maxv = float('inf') if max_str.lower() == 'inf' else float(max_str)
+                        label = self.table.item(r, 2).text()
+                        color = self.table.item(r, 3).text()
+                        tiers.append((minv, maxv, label, color))
+                else:
+                    pattern = self.table.item(r, 0).text()
                     label = self.table.item(r, 1).text()
                     color = self.table.item(r, 2).text()
-                    tiers.append((minv, label, color))
-                else:
-                    max_str = self.table.item(r, 1).text()
-                    maxv = float('inf') if max_str.lower() == 'inf' else float(max_str)
-                    label = self.table.item(r, 2).text()
-                    color = self.table.item(r, 3).text()
-                    tiers.append((minv, maxv, label, color))
+                    tiers.append((pattern, label, color))
             except:
                 pass
-        if self.is_min_threshold:
-            tiers.sort(key=lambda x: x[0], reverse=True)
+        if self.mode == "numeric":
+            if self.is_min_threshold:
+                tiers.sort(key=lambda x: x[0], reverse=True)
+            else:
+                tiers.sort(key=lambda x: x[0])
         else:
             tiers.sort(key=lambda x: x[0])
         return tiers
@@ -86,23 +112,32 @@ class TiersDialog(QDialog):
         row = self.table.currentRow() if not add else -1
         if row == -1 and not add:
             return
-        minv = 0.0 if row == -1 else float(self.table.item(row, 0).text())
-        if self.is_min_threshold:
+        if self.mode == "numeric":
+            minv = 0.0 if row == -1 else float(self.table.item(row, 0).text())
+            if self.is_min_threshold:
+                label = "" if row == -1 else self.table.item(row, 1).text()
+                color_str = "#FFFFFF" if row == -1 else self.table.item(row, 2).text()
+            else:
+                maxv = float('inf') if row == -1 else float('inf') if self.table.item(row, 1).text().lower() == 'inf' else float(self.table.item(row, 1).text())
+                max_str = "inf" if maxv == float('inf') else str(maxv)
+                label = "" if row == -1 else self.table.item(row, 2).text()
+                color_str = "#FFFFFF" if row == -1 else self.table.item(row, 3).text()
+        else:
+            pattern = "" if row == -1 else self.table.item(row, 0).text()
             label = "" if row == -1 else self.table.item(row, 1).text()
             color_str = "#FFFFFF" if row == -1 else self.table.item(row, 2).text()
-        else:
-            maxv = float('inf') if row == -1 else float('inf') if self.table.item(row, 1).text().lower() == 'inf' else float(self.table.item(row, 1).text())
-            max_str = "inf" if maxv == float('inf') else str(maxv)
-            label = "" if row == -1 else self.table.item(row, 2).text()
-            color_str = "#FFFFFF" if row == -1 else self.table.item(row, 3).text()
         edit_dlg = QDialog(self)
         edit_dlg.setWindowTitle("Add/Edit Tier")
         elayout = QVBoxLayout()
-        min_label = QLabel("Min:")
-        min_input = QLineEdit(str(minv))
+        if self.mode == "numeric":
+            min_label = QLabel("Min:")
+            min_input = QLineEdit(str(minv))
+        else:
+            min_label = QLabel("Pattern:")
+            min_input = QLineEdit(pattern)
         elayout.addWidget(min_label)
         elayout.addWidget(min_input)
-        if not self.is_min_threshold:
+        if self.mode == "numeric" and not self.is_min_threshold:
             max_label = QLabel("Max (inf for unbounded):")
             max_input = QLineEdit(max_str)
             elayout.addWidget(max_label)
@@ -126,28 +161,37 @@ class TiersDialog(QDialog):
         elayout.addWidget(ok)
         edit_dlg.setLayout(elayout)
         if edit_dlg.exec_():
-            new_min = float(min_input.text())
+            if self.mode == "numeric":
+                new_min = float(min_input.text())
+            else:
+                new_min = min_input.text()
             new_label = label_input.text()
             new_color = current_color.name()
-            if not self.is_min_threshold:
+            if self.mode == "numeric" and not self.is_min_threshold:
                 new_max_str = max_input.text()
                 new_max = float('inf') if new_max_str.lower() == 'inf' else float(new_max_str)
             if add:
                 row = self.table.rowCount()
                 self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(str(new_min)))
-            if self.is_min_threshold:
+            if self.mode == "numeric":
+                if self.is_min_threshold:
+                    self.table.setItem(row, 1, QTableWidgetItem(new_label))
+                    color_item = QTableWidgetItem(new_color)
+                    color_item.setBackground(current_color)
+                    self.table.setItem(row, 2, color_item)
+                else:
+                    max_item_str = "inf" if new_max == float('inf') else str(new_max)
+                    self.table.setItem(row, 1, QTableWidgetItem(max_item_str))
+                    self.table.setItem(row, 2, QTableWidgetItem(new_label))
+                    color_item = QTableWidgetItem(new_color)
+                    color_item.setBackground(current_color)
+                    self.table.setItem(row, 3, color_item)
+            else:
                 self.table.setItem(row, 1, QTableWidgetItem(new_label))
                 color_item = QTableWidgetItem(new_color)
                 color_item.setBackground(current_color)
                 self.table.setItem(row, 2, color_item)
-            else:
-                max_item_str = "inf" if new_max == float('inf') else str(new_max)
-                self.table.setItem(row, 1, QTableWidgetItem(max_item_str))
-                self.table.setItem(row, 2, QTableWidgetItem(new_label))
-                color_item = QTableWidgetItem(new_color)
-                color_item.setBackground(current_color)
-                self.table.setItem(row, 3, color_item)
 
     def delete_tier(self):
         row = self.table.currentRow()
@@ -181,48 +225,68 @@ class ActionHandler:
                     QMessageBox.warning(self.main, "Invalid Formula", str(e))
 
     def set_column_tiers(self):
-        numeric_cols = [col for col, typ in self.main.data_model.column_types.items() if typ in ["integer", "float", "boolean"]]
-        if not numeric_cols:
-            QMessageBox.warning(self.main, "No Columns", "No numeric columns available.")
+        cols = [col for col, typ in self.main.data_model.column_types.items() if typ in ["integer", "float", "boolean", "string"]]
+        if not cols:
+            QMessageBox.warning(self.main, "No Columns", "No columns available for tiers.")
             return
-        col, ok = QInputDialog.getItem(self.main, "Manage Column Tiers", "Select column:", numeric_cols, 0, False)
+        col, ok = QInputDialog.getItem(self.main, "Manage Column Tiers", "Select column:", cols, 0, False)
         if ok:
-            current_type = None
+            typ = self.main.data_model.column_types[col]
+            current_tier_mode = None
             current_tiers = []
             if col in self.main.data_model.column_tiers:
-                is_min_threshold, tiers = self.main.data_model.column_tiers[col]
-                current_type = "Min Threshold" if is_min_threshold else "Range"
-                current_tiers = tiers
-            types = ["Min Threshold", "Range"]
-            type_index = types.index(current_type) if current_type else 0
+                current_tier_mode, current_tiers = self.main.data_model.column_tiers[col]
+            if typ == "string":
+                types = ["String Match"]
+            else:
+                types = ["Min Threshold", "Range"]
+            current_type = None
+            if current_tier_mode:
+                if current_tier_mode == "string":
+                    current_type = "String Match"
+                elif current_tier_mode == "min_threshold":
+                    current_type = "Min Threshold"
+                elif current_tier_mode == "range":
+                    current_type = "Range"
+            type_index = types.index(current_type) if current_type in types else 0
             tier_type, ok2 = QInputDialog.getItem(self.main, "Tier Type", "Select tier type:", types, type_index, False)
             if ok2:
-                is_min_threshold = (tier_type == "Min Threshold")
-                if current_type and tier_type != current_type:
+                if typ == "string":
+                    tier_mode = "string"
+                    dlg_mode = "string"
+                    is_min_threshold = False  # irrelevant
+                else:
+                    tier_mode = "min_threshold" if tier_type == "Min Threshold" else "range"
+                    dlg_mode = "numeric"
+                    is_min_threshold = (tier_type == "Min Threshold")
+                if current_tier_mode and tier_mode != current_tier_mode:
                     reply = QMessageBox.question(self.main, "Change Type", "Changing type will clear existing tiers. Proceed?", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
                     if reply != QMessageBox.Yes:
                         return
                     current_tiers = []
                 if not current_tiers:
-                    if is_min_threshold:
-                        current_tiers = [
-                            (90, "Amethyst (≥90)", "#9966FF80"),
-                            (75, "Gold (≥75)", "#FFD70080"),
-                            (50, "Silver (≥50)", "#C0C0C080"),
-                            (25, "Bronze (≥25)", "#CD7F3280"),
-                            (0, "White (≥0)", "#FFFFFF80")
-                        ]
+                    if typ != "string":
+                        if is_min_threshold:
+                            current_tiers = [
+                                (90, "Amethyst (≥90)", "#9966FF80"),
+                                (75, "Gold (≥75)", "#FFD70080"),
+                                (50, "Silver (≥50)", "#C0C0C080"),
+                                (25, "Bronze (≥25)", "#CD7F3280"),
+                                (0, "White (≥0)", "#FFFFFF80")
+                            ]
+                        else:
+                            current_tiers = [
+                                (0, 10, "Green (0-10)", "#00800080"),
+                                (11, 20, "Yellow (11-20)", "#FFFF00"),
+                                (21, 30, "Orange (21-30)", "#FF5500"),
+                                (31, float('inf'), "Red (31+)", "#FF0000")
+                            ]
                     else:
-                        current_tiers = [
-                            (0, 10, "Green (0-10)", "#00800080"),
-                            (11, 20, "Yellow (11-20)", "ffff00"),
-                            (21, 30, "Orange (21-30)", "#ff5500"),
-                            (31, float('inf'), "Red (31+)", "#FF0000")
-                        ]
-                dlg = TiersDialog(self.main, is_min_threshold=is_min_threshold, current_tiers=current_tiers)
+                        current_tiers = []
+                dlg = TiersDialog(self.main, is_min_threshold=is_min_threshold, current_tiers=current_tiers, mode=dlg_mode)
                 if dlg.exec_():
                     tiers = dlg.get_tiers()
-                    self.main.data_model.set_column_tiers(col, is_min_threshold, tiers)
+                    self.main.data_model.set_column_tiers(col, tier_mode, tiers)
                     self.main.data_model.save_to_history()
                     self.main.update_legends()
                     self.main.refresh_table()
@@ -421,7 +485,7 @@ class ActionHandler:
         if path:
             if path.endswith('.xlsx'):
                 file_io.save_multi(self.main.data_models, path)
-                QMessageBox.information(self, "Export Successful", f"All pages saved to {path}")
+                QMessageBox.information(self.main, "Export Successful", f"All pages saved to {path}")
             else:
                 file_io.export_df(self.main.data_model.df, path)
                 QMessageBox.information(self.main, "Export Successful", f"Current page saved to {path}")

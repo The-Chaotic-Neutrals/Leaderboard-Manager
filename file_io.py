@@ -46,26 +46,41 @@ def load_multi(session_file):
                 c = parts[0]
                 typ_tiers = parts[1]
                 typ, tiers_str = typ_tiers.split(';', 1)
-                is_min_threshold = typ == 'a'
+                if typ == 'a':
+                    tier_mode = "min_threshold"
+                elif typ == 'p':
+                    tier_mode = "range"
+                elif typ == 's':
+                    tier_mode = "string"
+                else:
+                    continue
                 tier_list = []
                 tier_strs = tiers_str.split(';')
                 for ts in tier_strs:
                     if not ts.strip():
                         continue
-                    tp = ts.split(',')
-                    if is_min_threshold:
+                    if '~' in ts:
+                        tp = ts.split('~')
+                    else:
+                        tp = ts.split(',')
+                    if tier_mode == "min_threshold":
                         minv = float(tp[0])
                         label = tp[1]
                         color = tp[2]
                         tier_list.append((minv, label, color))
-                    else:
+                    elif tier_mode == "range":
                         minv = float(tp[0])
                         max_str = tp[1]
                         maxv = float('inf') if max_str == 'inf' else float(max_str)
                         label = tp[2]
                         color = tp[3]
                         tier_list.append((minv, maxv, label, color))
-                dm.column_tiers[c] = (is_min_threshold, tier_list)
+                    elif tier_mode == "string":
+                        pattern = tp[0]
+                        label = tp[1]
+                        color = tp[2]
+                        tier_list.append((pattern, label, color))
+                dm.column_tiers[c] = (tier_mode, tier_list)
         # Backwards compat
         if 'score_col' in row and pd.notna(row['score_col']):
             score_col = row['score_col']
@@ -77,25 +92,31 @@ def load_multi(session_file):
                 strs = row['score_tiers_str'].split('|')
                 tiers = []
                 for s in strs:
-                    parts = s.split(',', 2)
+                    if '~' in s:
+                        parts = s.split('~')
+                    else:
+                        parts = s.split(',')
                     minv = float(parts[0])
                     label = parts[1]
                     color = parts[2]
                     tiers.append((minv, label, color))
-                dm.column_tiers[score_col] = (True, sorted(tiers, key=lambda x: x[0], reverse=True))
+                dm.column_tiers[score_col] = ("min_threshold", sorted(tiers, key=lambda x: x[0], reverse=True))
         if 'penalty_col' in row and pd.notna(row['penalty_col']):
             penalty_col = row['penalty_col']
             if 'penalty_tiers_str' in row and pd.notna(row['penalty_tiers_str']):
                 strs = row['penalty_tiers_str'].split('|')
                 tiers = []
                 for s in strs:
-                    parts = s.split(',', 3)
+                    if '~' in s:
+                        parts = s.split('~')
+                    else:
+                        parts = s.split(',')
                     minv = float(parts[0])
                     maxv = float(parts[1]) if parts[1] != 'inf' else float('inf')
                     label = parts[2]
                     color = parts[3]
                     tiers.append((minv, maxv, label, color))
-                dm.column_tiers[penalty_col] = (False, sorted(tiers, key=lambda x: x[0]))
+                dm.column_tiers[penalty_col] = ("range", sorted(tiers, key=lambda x: x[0]))
         dm.plot_columns = row['plot_columns'].split(',') if 'plot_columns' in row and pd.notna(row['plot_columns']) else []
         dms.append(dm)
     return dms
@@ -108,17 +129,25 @@ def save_multi(dms, session_file):
             formulas_str = '|'.join([f"{c}:{f.replace('|', '||')}" for c, f in dm.column_formulas.items()])
             meta['formulas_str'] = formulas_str if formulas_str else None
             tiers_str_list = []
-            for c, (is_min_threshold, tiers) in dm.column_tiers.items():
+            for c, (tier_mode, tiers) in dm.column_tiers.items():
                 inner = []
-                for tier in tiers:
-                    if is_min_threshold:
+                if tier_mode == "min_threshold":
+                    typ = 'a'
+                    for tier in tiers:
                         ts = ','.join([str(tier[0]), tier[1], tier[2]])
-                    else:
+                        inner.append(ts)
+                elif tier_mode == "range":
+                    typ = 'p'
+                    for tier in tiers:
                         max_str = 'inf' if tier[1] == float('inf') else str(tier[1])
                         ts = ','.join([str(tier[0]), max_str, tier[2], tier[3]])
-                    inner.append(ts)
+                        inner.append(ts)
+                elif tier_mode == "string":
+                    typ = 's'
+                    for tier in tiers:
+                        ts = ','.join([tier[0], tier[1], tier[2]])
+                        inner.append(ts)
                 tiers_inner = ';'.join(inner)
-                typ = 'a' if is_min_threshold else 'p'
                 tiers_str_list.append(f"{c}:{typ};{tiers_inner}")
             tiers_str = '|'.join(tiers_str_list)
             meta['tiers_str'] = tiers_str if tiers_str else None
